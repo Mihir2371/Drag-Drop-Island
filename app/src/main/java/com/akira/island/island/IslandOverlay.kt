@@ -189,6 +189,8 @@ fun IslandOverlay(
     val battery by IslandBus.battery.collectAsState()
     val foreground by IslandBus.foregroundPackage.collectAsState()
     val expanded by IslandBus.expanded.collectAsState()
+    val dragGoTargets by DragGo.targets.collectAsState()
+    val dragGoMode = saved.dragGoEnabled && dragGoTargets.isNotEmpty()
     val focus by IslandBus.focus.collectAsState()
     val calibrating by IslandBus.calibrating.collectAsState()
     val nextAlarm by IslandBus.nextAlarm.collectAsState()
@@ -428,7 +430,7 @@ fun IslandOverlay(
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
             CompositionLocalProvider(LocalActivities provides acts.filterNot { it.transient }) {
-                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, onBody, onBubble, onBackdropShape, onBackdropSampler)
+                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, dragGoMode, onBody, onBubble, onBackdropShape, onBackdropSampler)
             }
         }
         if (timedHidden) CameraWakeTarget(s, onBounds = { r ->
@@ -476,6 +478,7 @@ internal fun IslandRow(
     bubbleVisible: Boolean,
     bubbleAct: Act?,
     calibrating: Boolean,
+    dragGoMode: Boolean,
     onBodyBounds: (Rect) -> Unit,
     onBubbleBounds: (Rect) -> Unit,
     onBackdropShape: ((BackdropGeometry) -> Unit)? = null,
@@ -499,7 +502,7 @@ internal fun IslandRow(
         // Пустое место с другой стороны уравновешивает пузырь, чтобы остров стоял над камерой
         val left = s.bubbleSide == BubbleSide.LEFT
         if (left) BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds, left = true) else Spacer(Modifier.animatedWidth(slot))
-        IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, onBodyBounds, onBackdropShape, onBackdropSampler)
+        IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, dragGoMode, onBodyBounds, onBackdropShape, onBackdropSampler)
         if (left) Spacer(Modifier.animatedWidth(slot)) else BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds, left = false)
     }
 }
@@ -551,6 +554,7 @@ internal fun IslandBody(
     lyrics: Lyrics?,
     battery: BatteryInfo,
     calibrating: Boolean,
+    dragGoMode: Boolean,
     onBounds: (Rect) -> Unit,
     onBackdropShape: ((BackdropGeometry) -> Unit)? = null,
     onBackdropSampler: (((() -> Unit)?) -> Unit)? = null,
@@ -819,7 +823,8 @@ internal fun IslandBody(
                 change.using(SizeTransform(clip = true) { _, _ -> islandSpec(s) })
             },
         ) { f ->
-            Box(if (s.liquidExpand) liquidFlow(f.key, frames, widths, s) else classicFlow(s)) {
+            Box((if (s.liquidExpand) liquidFlow(f.key, frames, widths, s) else classicFlow(s))
+                .graphicsLayer { alpha = if (dragGoMode) 0f else 1f }) {
                 if (f.expanded) {
                     ExpandedContent(f.act, s, lyrics, battery, expandedWidth)
                 } else {
