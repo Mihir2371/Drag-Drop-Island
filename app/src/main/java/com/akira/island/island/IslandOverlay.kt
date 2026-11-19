@@ -434,7 +434,7 @@ fun IslandOverlay(
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
             CompositionLocalProvider(LocalActivities provides acts.filterNot { it.transient }) {
-                IslandRow(slot, s, primary, showExpanded && !dragGoMode, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, dragGoMode, onBody, onBubble, onBackdropShape, onBackdropSampler)
+                IslandRow(slot, s, primary, showExpanded || dragGoMode, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, dragGoMode, onBody, onBubble, onBackdropShape, onBackdropSampler)
             }
         }
         if (timedHidden) CameraWakeTarget(s, onBounds = { r ->
@@ -834,7 +834,9 @@ internal fun IslandBody(
                 .graphicsLayer { alpha = if (dragGoMode) 0f else 1f }) {
                 // Drag & Go hides normal island content; keep its measured layout compact too.
                 // Otherwise the invisible ExpandedContent still reserves a tall blank area above the app row.
-                if (f.expanded && !dragGoMode) {
+                if (dragGoMode) {
+                    Spacer(Modifier.width(expandedWidth).height(h))
+                } else if (f.expanded) {
                     ExpandedContent(f.act, s, lyrics, battery, expandedWidth)
                 } else {
                     CompactContent(f.act, s, expandedWidth)
@@ -1205,6 +1207,7 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
             pickerView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
         }
     }
+    DragGo.updatePickerBounds(if (enabled && targets.isNotEmpty()) islandBounds else Rect.Zero)
     if (!enabled || targets.isEmpty() || islandBounds.isEmpty) return
 
     // Render the destination strip directly over the capsule, not as a separate panel below it.

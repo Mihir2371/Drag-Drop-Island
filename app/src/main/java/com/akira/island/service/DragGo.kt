@@ -22,6 +22,8 @@ internal object DragGo {
     private val _sessionActive = MutableStateFlow(false)
     private val _edgeScroll = MutableStateFlow(0)
     val edgeScroll = _edgeScroll.asStateFlow()
+    private val pickerBounds = MutableStateFlow(Rect.Zero)
+    fun updatePickerBounds(bounds: Rect) { pickerBounds.value = bounds }
     val sessionActive = _sessionActive.asStateFlow()
     private val targetBounds = mutableMapOf<String, Rect>()
     private var pendingMimeTypes: List<String> = emptyList()
@@ -68,6 +70,7 @@ internal object DragGo {
             .distinctBy { targetKey(it) }
             .sortedBy { it.loadLabel(pm).toString().lowercase() }
         targetBounds.clear()
+        pickerBounds.value = Rect.Zero
         _selectedTarget.value = null
         _targets.value = compatible
     }
@@ -100,11 +103,11 @@ internal object DragGo {
         return launched
     }
 
-    private fun edgeDirection(x: Float, rects: List<Rect>, context: Context): Int {
+    private fun edgeDirection(x: Float, context: Context): Int {
+        val rect = pickerBounds.value
+        if (rect.isEmpty) return 0
         val edge = 36f * context.resources.displayMetrics.density
-        val left = rects.filterNot { it.isEmpty }.minOfOrNull { it.left } ?: return 0
-        val right = rects.filterNot { it.isEmpty }.maxOfOrNull { it.right } ?: return 0
-        return when { x <= left + edge -> -1; x >= right - edge -> 1; else -> 0 }
+        return when { x <= rect.left + edge -> -1; x >= rect.right - edge -> 1; else -> 0 }
     }
 
     fun accepts(event: DragEvent): Boolean {
@@ -162,7 +165,7 @@ internal object DragGo {
                         val origin = screenOrigin()
                         val screenX = origin[0] + event.x
                         selectAt(screenX, origin[1] + event.y)
-                        _edgeScroll.value = edgeDirection(screenX, bounds(), context)
+                        _edgeScroll.value = edgeDirection(event.x, context)
                         true
                     }
                 }
@@ -175,7 +178,7 @@ internal object DragGo {
                         val origin = screenOrigin()
                         val screenX = origin[0] + event.x
                         selectAt(screenX, origin[1] + event.y)
-                        _edgeScroll.value = edgeDirection(screenX, bounds(), context)
+                        _edgeScroll.value = edgeDirection(event.x, context)
                         true
                     }
                 }
