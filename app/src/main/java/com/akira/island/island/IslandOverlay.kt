@@ -1158,6 +1158,7 @@ internal fun groupedProgress(items: List<com.akira.island.core.ProgressInfo>): c
 @Composable
 private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean) {
     val context = LocalContext.current
+    val pickerView = androidx.compose.ui.platform.LocalView.current
     val targets by DragGo.targets.collectAsState()
     LaunchedEffect(enabled) { if (!enabled) DragGo.dismiss() }
     if (!enabled || targets.isEmpty()) return
@@ -1194,7 +1195,7 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean) {
                     modifier = Modifier
                         .size(42.dp)
                         .clickable {
-                            performPickerHaptic(context)
+                            pickerView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                             DragGo.launchTarget(context, target)
                         },
                 )
@@ -1203,12 +1204,3 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean) {
     }
 }
 
-private fun performPickerHaptic(context: Context) {
-    val vibrator = context.getSystemService(android.os.Vibrator::class.java)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        vibrator?.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_TICK))
-    } else {
-        @Suppress("DEPRECATION")
-        vibrator?.vibrate(12)
-    }
-}
