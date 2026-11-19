@@ -190,6 +190,8 @@ enum class AppLanguage(val code: String) {
 @Serializable
 data class IslandSettings(
     val enabled: Boolean = true,
+    /** Dynamic app destinations for drag-to-share; disabled by default until user opts in. */
+    val dragGoEnabled: Boolean = false,
     /** Язык приложения и острова */
     val language: AppLanguage = AppLanguage.SYSTEM,
 
