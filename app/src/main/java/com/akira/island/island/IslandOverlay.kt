@@ -835,7 +835,7 @@ internal fun IslandBody(
                 // Drag & Go hides normal island content; keep its measured layout compact too.
                 // Otherwise the invisible ExpandedContent still reserves a tall blank area above the app row.
                 if (dragGoMode) {
-                    Spacer(Modifier.width(expandedWidth).height(h))
+                    Spacer(Modifier.width(expandedWidth).height(h.coerceAtLeast(64.dp)))
                 } else if (f.expanded) {
                     ExpandedContent(f.act, s, lyrics, battery, expandedWidth)
                 } else {
@@ -1214,7 +1214,7 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     val pickerWidth = with(density) { islandBounds.width.toDp() }.coerceAtLeast(128.dp)
     val x = with(density) { islandBounds.left.toDp() }
     val y = with(density) { islandBounds.top.toDp() }
-    val pickerHeight = with(density) { islandBounds.height.toDp() }.coerceAtLeast(48.dp)
+    val pickerHeight = with(density) { islandBounds.height.toDp() }.coerceAtLeast(64.dp)
     Box(Modifier.fillMaxSize().zIndex(40f)) {
         Row(
             Modifier
@@ -1224,7 +1224,7 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                 .clip(RoundedCornerShape(50))
                 .background(Color.Transparent)
                 .horizontalScroll(scroll)
-                .padding(horizontal = 8.dp, vertical = 5.dp),
+                .padding(horizontal = 9.dp, vertical = 7.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1242,7 +1242,7 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                         }
                     },
                     modifier = Modifier
-                        .size(34.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(if (selected) Color.White.copy(alpha = 0.26f) else Color.Transparent, CircleShape)
                         .border(
