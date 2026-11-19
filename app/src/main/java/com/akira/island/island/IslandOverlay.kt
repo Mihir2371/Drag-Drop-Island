@@ -1157,6 +1157,7 @@ internal fun groupedProgress(items: List<com.akira.island.core.ProgressInfo>): c
 private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean) {
     val context = LocalContext.current
     val targets by DragGo.targets.collectAsState()
+    LaunchedEffect(enabled) { if (!enabled) DragGo.dismiss() }
     if (!enabled || targets.isEmpty()) return
     val shape = RoundedCornerShape(if (notch) 0.dp else 26.dp, if (notch) 0.dp else 26.dp, 26.dp, 26.dp)
     Box(
