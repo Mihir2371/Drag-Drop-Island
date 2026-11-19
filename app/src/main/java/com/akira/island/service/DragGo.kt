@@ -19,6 +19,7 @@ internal object DragGo {
     val selectedTarget = _selectedTarget.asStateFlow()
     private val targetBounds = mutableMapOf<String, Rect>()
     private var pendingMimeTypes: List<String> = emptyList()
+    private var preparedForCurrentDrag = false
 
     fun targetKey(info: ResolveInfo): String =
         info.activityInfo?.let { "${it.packageName}/${it.name}" }.orEmpty()
@@ -34,12 +35,14 @@ internal object DragGo {
 
     fun dismiss() {
         pendingMimeTypes = emptyList()
+        preparedForCurrentDrag = false
         targetBounds.clear()
         _selectedTarget.value = null
         _targets.value = emptyList()
     }
 
     private fun prepareTargets(context: Context, event: DragEvent) {
+        if (preparedForCurrentDrag) return
         val description = event.clipDescription ?: return
         val mimeTypes = (0 until description.mimeTypeCount)
             .map { description.getMimeType(it) }
@@ -48,7 +51,7 @@ internal object DragGo {
                 type.startsWith("application/") || type == "application/uri-list" }
             .distinct()
         if (mimeTypes.isEmpty()) return
-        if (mimeTypes == pendingMimeTypes && _targets.value.isNotEmpty()) return
+        preparedForCurrentDrag = true
         pendingMimeTypes = mimeTypes
         val pm = context.packageManager
         val compatible = mimeTypes.flatMap { mime ->
@@ -126,13 +129,26 @@ internal object DragGo {
                 return@OnDragListener false
             }
             when (event.action) {
-                DragEvent.ACTION_DRAG_STARTED -> accepts(event)
-                DragEvent.ACTION_DRAG_ENTERED, DragEvent.ACTION_DRAG_LOCATION -> {
+                DragEvent.ACTION_DRAG_STARTED -> {
+                    dismiss()
+                    accepts(event)
+                }
+                DragEvent.ACTION_DRAG_ENTERED -> {
                     if (!isOverIsland(event.x, event.y, bounds())) {
                         _selectedTarget.value = null
                         false
                     } else {
                         prepareTargets(context, event)
+                        val origin = screenOrigin()
+                        selectAt(origin[0] + event.x, origin[1] + event.y)
+                        true
+                    }
+                }
+                DragEvent.ACTION_DRAG_LOCATION -> {
+                    if (!isOverIsland(event.x, event.y, bounds())) {
+                        _selectedTarget.value = null
+                        false
+                    } else {
                         val origin = screenOrigin()
                         selectAt(origin[0] + event.x, origin[1] + event.y)
                         true
@@ -148,7 +164,8 @@ internal object DragGo {
                     sendToTarget(context, event)
                 }
                 DragEvent.ACTION_DRAG_ENDED -> {
-                    if (!event.result) dismiss()
+                    // Always release ResolveInfo/ClipDescription-derived state, including successful drops elsewhere.
+                    dismiss()
                     true
                 }
                 else -> false
