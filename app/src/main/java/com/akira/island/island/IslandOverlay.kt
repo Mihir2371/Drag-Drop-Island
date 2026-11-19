@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.SystemClock
 import android.widget.ImageView
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxWidth
