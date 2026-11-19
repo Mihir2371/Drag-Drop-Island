@@ -15,24 +15,78 @@ import kotlinx.coroutines.flow.asStateFlow
 internal object DragGo {
     private val _targets = MutableStateFlow<List<ResolveInfo>>(emptyList())
     val targets = _targets.asStateFlow()
-    private var pendingSend: Intent? = null
-    private var preparedClip: ClipData? = null
+    private val _selectedTarget = MutableStateFlow<String?>(null)
+    val selectedTarget = _selectedTarget.asStateFlow()
+    private val targetBounds = mutableMapOf<String, Rect>()
+    private var pendingMimeTypes: List<String> = emptyList()
+
+    fun targetKey(info: ResolveInfo): String =
+        info.activityInfo?.let { "${it.packageName}/${it.name}" }.orEmpty()
+
+    fun updateTargetBounds(key: String, bounds: Rect) {
+        if (key.isNotBlank()) targetBounds[key] = bounds
+    }
+
+    private fun selectAt(x: Float, y: Float) {
+        val next = targetBounds.entries.firstOrNull { it.value.contains(androidx.compose.ui.geometry.Offset(x, y)) }?.key
+        if (next != _selectedTarget.value) _selectedTarget.value = next
+    }
 
     fun dismiss() {
-        pendingSend = null
-        preparedClip = null
+        pendingMimeTypes = emptyList()
+        targetBounds.clear()
+        _selectedTarget.value = null
         _targets.value = emptyList()
     }
 
-    fun launchTarget(context: Context, info: ResolveInfo) {
-        val base = pendingSend ?: return dismiss()
-        val activity = info.activityInfo ?: return dismiss()
-        val intent = Intent(base).apply {
-            setClassName(activity.packageName, activity.name)
+    private fun prepareTargets(context: Context, event: DragEvent) {
+        val description = event.clipDescription ?: return
+        val mimeTypes = (0 until description.mimeTypeCount)
+            .map { description.getMimeType(it) }
+            .filter { type -> type.startsWith("text/") || type.startsWith("image/") ||
+                type.startsWith("video/") || type.startsWith("audio/") ||
+                type.startsWith("application/") || type == "application/uri-list" }
+            .distinct()
+        if (mimeTypes.isEmpty()) return
+        if (mimeTypes == pendingMimeTypes && _targets.value.isNotEmpty()) return
+        pendingMimeTypes = mimeTypes
+        val pm = context.packageManager
+        val compatible = mimeTypes.flatMap { mime ->
+            pm.queryIntentActivities(Intent(Intent.ACTION_SEND).setType(mime), 0)
+        }.filter { it.activityInfo?.packageName != context.packageName }
+            .distinctBy { targetKey(it) }
+            .sortedBy { it.loadLabel(pm).toString().lowercase() }
+        targetBounds.clear()
+        _selectedTarget.value = null
+        _targets.value = compatible
+    }
+
+    private fun sendToTarget(context: Context, event: DragEvent): Boolean {
+        val clip = event.clipData ?: return false
+        if (clip.itemCount == 0) return false
+        val selectedKey = _selectedTarget.value ?: return false
+        val target = _targets.value.firstOrNull { targetKey(it) == selectedKey } ?: return false
+        val activity = target.activityInfo ?: return false
+        val item = clip.getItemAt(0)
+        val uri = item.uri
+        val text = item.text?.toString()
+        val mime = mimeFor(context, event, uri)
+        val isText = mime.startsWith("text/") || mime == "application/uri-list"
+        if (uri == null && text.isNullOrBlank()) return false
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            if (isText) putExtra(Intent.EXTRA_TEXT, text ?: uri?.toString())
+            else if (uri != null) {
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } else putExtra(Intent.EXTRA_TEXT, text)
+            clipData = ClipData(clip)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            setClassName(activity.packageName, activity.name)
         }
-        runCatching { context.startActivity(intent) }
+        val launched = runCatching { context.startActivity(send) }.isSuccess
         dismiss()
+        return launched
     }
 
     fun accepts(event: DragEvent): Boolean {
@@ -60,47 +114,12 @@ internal object DragGo {
         return "text/plain"
     }
 
-    fun drop(context: Context, event: DragEvent): Boolean {
-        val clip = event.clipData ?: return false
-        if (clip.itemCount == 0) return false
-        if (preparedClip === clip && _targets.value.isNotEmpty()) return true
-        val item = clip.getItemAt(0)
-        val uri = item.uri
-        val text = item.text?.toString() ?: item.intent?.toUri(Intent.URI_INTENT_SCHEME)
-        if (uri == null && text.isNullOrBlank()) return false
-        val mime = mimeFor(context, event, uri)
-        val isText = mime.startsWith("text/") || mime == "application/uri-list"
-        val payloadText = text ?: uri?.toString()
-        val send = Intent(Intent.ACTION_SEND).apply {
-            type = mime
-            if (isText) {
-                putExtra(Intent.EXTRA_TEXT, payloadText)
-                clipData = ClipData.newPlainText("Dragged text", payloadText)
-            } else if (uri != null) {
-                putExtra(Intent.EXTRA_STREAM, uri)
-                clipData = ClipData.newUri(context.contentResolver, "Dragged content", uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } else {
-                putExtra(Intent.EXTRA_TEXT, payloadText)
-                clipData = ClipData.newPlainText("Dragged text", payloadText)
-            }
-        }
-        val pm = context.packageManager
-        val compatible = pm.queryIntentActivities(send, 0)
-            .filter { it.activityInfo?.packageName != context.packageName }
-            .distinctBy { it.activityInfo?.packageName }
-            .sortedBy { it.loadLabel(pm).toString().lowercase() }
-        if (compatible.isEmpty()) {
-            android.widget.Toast.makeText(context, "No compatible apps found", android.widget.Toast.LENGTH_SHORT).show()
-            return true
-        }
-        pendingSend = send
-        preparedClip = clip
-        _targets.value = compatible
-        return true
-    }
-
-    fun listener(context: Context, bounds: () -> List<Rect>, enabled: () -> Boolean): View.OnDragListener =
+    fun listener(
+        context: Context,
+        bounds: () -> List<Rect>,
+        screenOrigin: () -> IntArray,
+        enabled: () -> Boolean,
+    ): View.OnDragListener =
         View.OnDragListener { _, event ->
             if (!enabled()) {
                 if (_targets.value.isNotEmpty()) dismiss()
@@ -109,12 +128,29 @@ internal object DragGo {
             when (event.action) {
                 DragEvent.ACTION_DRAG_STARTED -> accepts(event)
                 DragEvent.ACTION_DRAG_ENTERED, DragEvent.ACTION_DRAG_LOCATION -> {
-                    if (!isOverIsland(event.x, event.y, bounds())) false else drop(context, event)
+                    if (!isOverIsland(event.x, event.y, bounds())) {
+                        _selectedTarget.value = null
+                        false
+                    } else {
+                        prepareTargets(context, event)
+                        val origin = screenOrigin()
+                        selectAt(origin[0] + event.x, origin[1] + event.y)
+                        true
+                    }
                 }
-                DragEvent.ACTION_DRAG_EXITED -> true
-                DragEvent.ACTION_DROP -> isOverIsland(event.x, event.y, bounds()) && drop(context, event)
-                // Keep the destination list visible after the source finishes dragging.
-                DragEvent.ACTION_DRAG_ENDED -> true
+                DragEvent.ACTION_DRAG_EXITED -> {
+                    _selectedTarget.value = null
+                    true
+                }
+                DragEvent.ACTION_DROP -> {
+                    val origin = screenOrigin()
+                    selectAt(origin[0] + event.x, origin[1] + event.y)
+                    sendToTarget(context, event)
+                }
+                DragEvent.ACTION_DRAG_ENDED -> {
+                    if (!event.result) dismiss()
+                    true
+                }
                 else -> false
             }
         }
