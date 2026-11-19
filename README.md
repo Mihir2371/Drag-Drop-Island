@@ -3,32 +3,12 @@
 </p>
 
 <div align="center">
-
+This repo is formed credits to original creator
 # 🏝️ Dynamic Island for Android
 
 **An iPhone-style Dynamic Island around the camera of any Android phone**
 
 Notifications with reply · navigation · payments · music with lyrics · calls · timers · downloads · charging · flashlight · system events
-
-[![Version 1.7.2](https://img.shields.io/badge/version-1.7.2-C6C3F7?style=for-the-badge&labelColor=1C1B22)](https://github.com/Arusaky/Dynamic-Island-/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/Akira9021/Dynamic-Island-/total?style=for-the-badge&label=downloads&color=34C759&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/releases)
-[![Build](https://img.shields.io/github/actions/workflow/status/Akira9021/Dynamic-Island-/android.yml?style=for-the-badge&label=build&labelColor=1C1B22)](https://github.com/Akira9021/Dynamic-Island-/actions)
-<br>
-![Android 8+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.1-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
-![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)
-![No ads](https://img.shields.io/badge/ads-0-black?style=flat-square)
-
-<img src="docs/preview-1.7.0.png" width="820" alt="Dynamic Island 1.7.0: illustrated shortcuts, clock, weather and custom text color previews">
-
-### [⬇️ Download the latest version](https://github.com/Akira9021/Dynamic-Island-/releases/latest)
-
-[What's new](#-whats-new-in-170) · [Features](#-features) · [Installation](#-installation) · [Gestures](#-gestures) · [Settings](#-settings) · [How it works](#-how-it-works)
-
-</div>
-
-> [!NOTE]
-> Since 1.6.1 the app and the island speak English and Russian — switch in Features → General → Language («Функции → Общие → Язык»). Russian labels in brackets are for older versions.
 
 ---
 
@@ -93,7 +73,7 @@ Short notices in the capsule, each can be turned on separately:
 
 ## 📥 Installation
 
-1. Download **`DynamicIsland.apk`** from the [latest release](https://github.com/Akira9021/Dynamic-Island-/releases/latest) page and install it.
+1. Download **`DynamicIsland.apk`** from the [latest release] page and install it.
 2. Open the app — on Home tap **Open accessibility** («Открыть спец. возможности») and turn on "Dynamic Island" («Динамический остров»).
    > On Android 13+ you'll see "Restricted setting": close it, open **App info → ⋮ → Allow restricted settings** and repeat step 2. The "⋮" menu item only appears after the first attempt.
 3. Home → **Permissions** («Разрешения»): turn on **Notification access** («Доступ к уведомлениям») — without it there's no music, downloads or Clock timers.
@@ -116,8 +96,6 @@ Short notices in the capsule, each can be turned on separately:
 
 New versions install over old ones; your settings are kept (from 1.6.0 or older — reinstall once, see above).
 
-> [!TIP]
-> You can update right in the island, or with [Obtainium](https://github.com/ImranR98/Obtainium): add `https://github.com/Akira9021/Dynamic-Island-` — the APK in releases is always called `DynamicIsland.apk`.
 
 ## 👆 Gestures
 
@@ -164,8 +142,6 @@ Kotlin, Jetpack Compose, Material 3. Requires JDK 17 and Android SDK 35.
 ./gradlew assembleRelease   # app-release-unsigned.apk — CI adds the release signature
 ```
 
-Every push builds an APK in [GitHub Actions](https://github.com/Akira9021/Dynamic-Island-/actions). To release a new version, bump `versionName` and `versionCode` in `app/build.gradle.kts` and the version badge at the top of both READMEs, and add a `## [x.y.z]` section to [CHANGELOG.md](CHANGELOG.md) and [CHANGELOG.en.md](CHANGELOG.en.md) — after a push to the default branch the release with the APK and bilingual notes is created automatically. A `v*` tag works too.
-
 | File | Responsible for |
 | --- | --- |
 | `service/IslandService.kt` | The accessibility service and two windows: drawing (full width, touches pass through) and touch (invisible, exactly over the island) |
@@ -185,6 +161,7 @@ The signing key isn't stored in the repository: Gradle builds an unsigned APK, C
 </details>
 
 ## 💜 Credits
+This repo was formed and the credits go to the original creator of the app 
 
 The idea and behavior come from [Dynamic Island for Windows](https://github.com/mihailkotovski/DynamicIsland) (mihailkotovski): spring animations, the player on click, a sideways push to change tracks, the ring timer, lyrics from LRCLIB. Lyrics — [LRCLIB](https://lrclib.net).
 
