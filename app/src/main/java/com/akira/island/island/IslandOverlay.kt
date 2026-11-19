@@ -433,7 +433,7 @@ fun IslandOverlay(
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
             CompositionLocalProvider(LocalActivities provides acts.filterNot { it.transient }) {
-                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, dragGoMode, onBody, onBubble, onBackdropShape, onBackdropSampler)
+                IslandRow(slot, s, primary, showExpanded && !dragGoMode, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, dragGoMode, onBody, onBubble, onBackdropShape, onBackdropSampler)
             }
         }
         if (timedHidden) CameraWakeTarget(s, onBounds = { r ->
@@ -1180,8 +1180,13 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     LaunchedEffect(enabled) {
         if (!enabled) DragGo.dismiss()
     }
+    val dragSession by DragGo.sessionActive.collectAsState()
     LaunchedEffect(enabled, targets) {
         if (enabled && targets.isNotEmpty()) IslandBus.expanded.value = true
+    }
+    // Restore the user's normal island state as soon as the Android drag session ends.
+    LaunchedEffect(dragSession, targets) {
+        if (!dragSession && targets.isEmpty()) Controls.collapse()
     }
     LaunchedEffect(selectedTarget, targets) {
         val index = targets.indexOfFirst { DragGo.targetKey(it) == selectedTarget }
@@ -1204,8 +1209,7 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                 .width(pickerWidth)
                 .height(pickerHeight)
                 .clip(RoundedCornerShape(50))
-                .background(Color(0xFF202126))
-                .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
+                .background(Color.Transparent)
                 .horizontalScroll(scroll)
                 .padding(horizontal = 8.dp, vertical = 5.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
