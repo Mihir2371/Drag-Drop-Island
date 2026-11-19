@@ -7,7 +7,8 @@ import android.net.Uri
 import android.view.DragEvent
 import android.view.View
 import android.widget.ArrayAdapter
-import androidx.appcompat.app.AlertDialog
+import android.widget.TextView
+import android.app.AlertDialog
 import androidx.compose.ui.geometry.Rect
 
 /** Additive drag-to-share handling with dynamically resolved app destinations. */
@@ -69,9 +70,22 @@ internal object DragGo {
         }
 
         val labels = destinations.map { it.loadLabel(pm).toString() }.toTypedArray()
+        val adapter = object : ArrayAdapter<String>(context, android.R.layout.select_dialog_item, labels) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val row = (convertView as? TextView) ?: TextView(context).apply {
+                    setPadding(24, 18, 24, 18)
+                    textSize = 16f
+                }
+                val app = destinations[position]
+                row.text = labels[position]
+                row.setCompoundDrawablesWithIntrinsicBounds(app.loadIcon(pm), null, null, null)
+                row.compoundDrawablePadding = 20
+                return row
+            }
+        }
         val dialog = AlertDialog.Builder(context)
             .setTitle("Drag & Go · Send to")
-            .setAdapter(ArrayAdapter(context, android.R.layout.select_dialog_item, labels)) { d, index ->
+            .setAdapter(adapter) { d, index ->
                 val target = destinations.getOrNull(index)?.activityInfo ?: return@setAdapter
                 val direct = Intent(send).apply {
                     setClassName(target.packageName, target.name)
@@ -83,9 +97,8 @@ internal object DragGo {
             }
             .setNegativeButton("Cancel", null)
             .create()
-        dialog.window?.setType(android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
         return runCatching {
-            dialog.window?.setType(android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+            dialog.window?.setType(android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY)
             dialog.show()
             true
         }.getOrDefault(false)
