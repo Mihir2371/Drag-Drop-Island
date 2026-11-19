@@ -398,8 +398,9 @@ class IslandService : AccessibilityService() {
             }
         }
         drawRoot.addView(compose)
-        // Drag & Go: accept text/images only when the drop lands on the island or bubble.
-        drawRoot.setOnDragListener(DragGo.listener(this, { listOf(body, bubble) }, { SettingsRepo.current.dragGoEnabled }))
+        // Drag & Go is attached to the island-sized touch window so it can receive drag events.
+        // Drag coordinates are local to that window, whose bounds already cover body and bubble.
+        // (Listener is installed below when TouchRoot is created.)
         drawRoot.viewTreeObserver.addOnPreDrawListener {
             // Sample animated graphics-layer transforms even when content itself is cached.
             backdropSampler?.invoke()
@@ -413,6 +414,7 @@ class IslandService : AccessibilityService() {
         runCatching { wm?.addView(drawRoot, displayParams) }.onSuccess { display = drawRoot }
 
         val touchRoot = TouchRoot(this, { display }, ::onOutsideTouch)
+        touchRoot.setOnDragListener(DragGo.listener(this, { listOf(Rect(0f, 0f, touchRoot.width.toFloat(), touchRoot.height.toFloat())) }, { SettingsRepo.current.dragGoEnabled }))
         runCatching { wm?.addView(touchRoot, touchParams) }.onSuccess { touch = touchRoot }
         scope.launch {
             combine(SettingsRepo.state, IslandBus.expanded, IslandBus.screenOn, IslandBus.powerSave, IslandBus.locked) {
