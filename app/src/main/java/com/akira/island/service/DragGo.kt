@@ -47,15 +47,20 @@ internal object DragGo {
         val text = item.text?.toString() ?: item.intent?.toUri(Intent.URI_INTENT_SCHEME)
         if (uri == null && text.isNullOrBlank()) return false
         val mime = mimeFor(event, uri)
+        val isText = mime.startsWith("text/") || mime == "application/uri-list"
+        val textPayload = text ?: uri?.toString()
         val send = Intent(Intent.ACTION_SEND).apply {
             type = mime
-            if (uri != null) {
+            if (isText) {
+                putExtra(Intent.EXTRA_TEXT, textPayload)
+                clipData = ClipData.newPlainText("Dragged text", textPayload)
+            } else if (uri != null) {
                 putExtra(Intent.EXTRA_STREAM, uri)
                 clipData = ClipData.newUri(context.contentResolver, "Dragged content", uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             } else {
-                putExtra(Intent.EXTRA_TEXT, text)
-                clipData = ClipData.newPlainText("Dragged text", text)
+                putExtra(Intent.EXTRA_TEXT, textPayload)
+                clipData = ClipData.newPlainText("Dragged text", textPayload)
             }
         }
 
