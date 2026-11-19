@@ -65,8 +65,8 @@ fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, eve
                 val slot = animateDpAsState(if (pair && settings.bubble) activeHeight(settings) + 6.dp else 0.dp, islandSpec(settings), label = "previewBubble")
                 if (pair) {
                     IslandRow(slot, settings, if (settings.preferMusic) Act.MediaA(media) else Act.TimerA(timer), false, null,
-                        BatteryInfo(72), settings.bubble, if (settings.preferMusic) Act.TimerA(timer) else Act.MediaA(media), false, {}, {})
-                } else IslandBody(act, card && event == null && scene != PreviewScene.MESSAGE, settings, null, BatteryInfo(72, false), false, {})
+                        BatteryInfo(72), settings.bubble, if (settings.preferMusic) Act.TimerA(timer) else Act.MediaA(media), false, false, {}, {})
+                } else IslandBody(act, card && event == null && scene != PreviewScene.MESSAGE, settings, null, BatteryInfo(72, false), false, false, {})
             }
         }
     }
