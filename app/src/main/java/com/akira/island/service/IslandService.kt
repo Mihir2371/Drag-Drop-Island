@@ -419,7 +419,16 @@ class IslandService : AccessibilityService() {
         runCatching { wm?.addView(drawRoot, displayParams) }.onSuccess { display = drawRoot }
 
         val touchRoot = TouchRoot(this, { display }, ::onOutsideTouch)
-        touchRoot.setOnDragListener(DragGo.listener(this, { listOf(Rect(0f, 0f, touchRoot.width.toFloat(), touchRoot.height.toFloat())) }, { SettingsRepo.current.dragGoEnabled }))
+        touchRoot.setOnDragListener(DragGo.listener(
+            this,
+            { listOf(Rect(0f, 0f, touchRoot.width.toFloat(), touchRoot.height.toFloat())) },
+            {
+                val origin = IntArray(2)
+                touchRoot.getLocationOnScreen(origin)
+                origin
+            },
+            { SettingsRepo.current.dragGoEnabled },
+        ))
         runCatching { wm?.addView(touchRoot, touchParams) }.onSuccess { touch = touchRoot }
         scope.launch {
             combine(SettingsRepo.state, IslandBus.expanded, IslandBus.screenOn, IslandBus.powerSave, IslandBus.locked) {
