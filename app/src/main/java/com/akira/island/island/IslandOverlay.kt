@@ -1190,8 +1190,10 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     val islandWidth = with(density) { islandBounds.width.toDp() }
     val pickerWidth = minOf(320.dp, screenWidth - 24.dp, islandWidth)
     val x = with(density) { islandBounds.center.x.toDp() } - pickerWidth / 2
-    val pickerHeight = 58.dp
-    val y = with(density) { islandBounds.bottom.toDp() } - pickerHeight - 4.dp
+    // Keep the compact destination row directly under the capsule instead of pinning
+    // it to the bottom of the expanded overlay (which creates a large empty gap).
+    val pickerHeight = 48.dp
+    val y = with(density) { islandBounds.top.toDp() } + 40.dp
     Box(Modifier.fillMaxSize().zIndex(40f)) {
         Row(
             Modifier
@@ -1199,27 +1201,25 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                 .width(pickerWidth)
                 .height(pickerHeight)
                 .horizontalScroll(scroll)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             targets.forEach { target ->
                 val key = DragGo.targetKey(target)
                 val selected = selectedTarget == key
+                val icon = remember(target) { target.loadIcon(context.packageManager) }
+                val label = remember(target) { target.loadLabel(context.packageManager).toString() }
                 AndroidView(
                     factory = { ctx ->
                         ImageView(ctx).apply {
-                            setImageDrawable(target.loadIcon(ctx.packageManager))
-                            contentDescription = target.loadLabel(ctx.packageManager).toString()
+                            setImageDrawable(icon)
+                            contentDescription = label
                             scaleType = ImageView.ScaleType.FIT_CENTER
                         }
                     },
-                    update = {
-                        it.setImageDrawable(target.loadIcon(context.packageManager))
-                        it.contentDescription = target.loadLabel(context.packageManager).toString()
-                    },
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(38.dp)
                         .background(
                             if (selected) Color.White.copy(alpha = 0.20f) else Color.Transparent,
                             CircleShape,
