@@ -247,6 +247,11 @@ class IslandService : AccessibilityService() {
         faceUnlock = com.akira.island.face.FaceUnlockController(this, scope).also { it.start() }
         networkRateMonitor = NetworkRates.monitor().also { it.start(scope) }
 
+        // Keep the touch window synchronized with the temporary Drag & Go picker.
+        scope.launch {
+            DragGo.targets.collect { handler.post { onBoundsChanged() } }
+        }
+
         // Входящий смахнули — он скрыт, пока звонит; перестал звонить — следующий входящий снова в острове.
         // Здесь, а не в острове: пока остров спрятан, он не рисуется и ничего бы не сбросил
         scope.launch {
@@ -599,7 +604,7 @@ class IslandService : AccessibilityService() {
 
     private fun updateTouchWindow() {
         val view = touch ?: return
-        val area = when {
+        val islandArea = when {
             body.isEmpty -> bubble
             bubble.isEmpty -> body
             else -> Rect(
@@ -607,6 +612,18 @@ class IslandService : AccessibilityService() {
                 maxOf(body.right, bubble.right), maxOf(body.bottom, bubble.bottom),
             )
         }
+        // The picker is rendered just below the island; include that compact strip in
+        // the touch window only while destinations are visible.
+        val area = if (DragGo.targets.value.isNotEmpty() && !islandArea.isEmpty) {
+            val pickerWidth = minOf(dp(320), resources.displayMetrics.widthPixels - dp(24))
+            val center = (islandArea.left + islandArea.right) / 2
+            Rect(
+                maxOf(0f, center - pickerWidth / 2f),
+                islandArea.top,
+                minOf(resources.displayMetrics.widthPixels.toFloat(), center + pickerWidth / 2f),
+                islandArea.bottom + dp(66),
+            )
+        } else islandArea
         val usable = visible && !area.isEmpty
         val origin = IntArray(2)
         display?.getLocationOnScreen(origin)
