@@ -825,7 +825,9 @@ internal fun IslandBody(
         ) { f ->
             Box((if (s.liquidExpand) liquidFlow(f.key, frames, widths, s) else classicFlow(s))
                 .graphicsLayer { alpha = if (dragGoMode) 0f else 1f }) {
-                if (f.expanded) {
+                // Drag & Go hides normal island content; keep its measured layout compact too.
+                // Otherwise the invisible ExpandedContent still reserves a tall blank area above the app row.
+                if (f.expanded && !dragGoMode) {
                     ExpandedContent(f.act, s, lyrics, battery, expandedWidth)
                 } else {
                     CompactContent(f.act, s, expandedWidth)
