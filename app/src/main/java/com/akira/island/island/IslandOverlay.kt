@@ -1167,17 +1167,26 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     val density = LocalDensity.current
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     val targets by DragGo.targets.collectAsState()
+    val selectedTarget by DragGo.selectedTarget.collectAsState()
     val scroll = rememberScrollState()
-    LaunchedEffect(enabled) { if (!enabled) DragGo.dismiss() }
-    // Preparing a destination list means a valid drag has reached the island.
-    // Expand the capsule before measuring the picker so the destinations live inside it.
+
+    LaunchedEffect(enabled) {
+        if (!enabled) DragGo.dismiss()
+    }
     LaunchedEffect(enabled, targets) {
         if (enabled && targets.isNotEmpty()) IslandBus.expanded.value = true
     }
+    // Keep the currently hovered destination in view as the row scrolls.
+    LaunchedEffect(selectedTarget, targets) {
+        val index = targets.indexOfFirst { DragGo.targetKey(it) == selectedTarget }
+        if (index >= 0) {
+            val itemExtent = with(density) { 54.dp.roundToPx() }
+            scroll.animateScrollTo((index * itemExtent).coerceAtLeast(0))
+            pickerView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+        }
+    }
     if (!enabled || targets.isEmpty() || islandBounds.isEmpty) return
 
-    // Keep the destination row inside the expanded island body, not as a separate strip
-    // below the capsule. The measured width follows the island's expanded bounds.
     val islandWidth = with(density) { islandBounds.width.toDp() }
     val pickerWidth = minOf(320.dp, screenWidth - 24.dp, islandWidth)
     val x = with(density) { islandBounds.center.x.toDp() } - pickerWidth / 2
@@ -1195,6 +1204,8 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             targets.forEach { target ->
+                val key = DragGo.targetKey(target)
+                val selected = selectedTarget == key
                 AndroidView(
                     factory = { ctx ->
                         ImageView(ctx).apply {
@@ -1207,13 +1218,33 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                         it.setImageDrawable(target.loadIcon(context.packageManager))
                         it.contentDescription = target.loadLabel(context.packageManager).toString()
                     },
-                    modifier = Modifier.size(42.dp).clickable {
-                        pickerView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
-                        DragGo.launchTarget(context, target)
-                    },
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(
+                            if (selected) Color.White.copy(alpha = 0.20f) else Color.Transparent,
+                            CircleShape,
+                        )
+                        .border(
+                            width = if (selected) 1.5.dp else 0.dp,
+                            color = if (selected) Color.White.copy(alpha = 0.95f) else Color.Transparent,
+                            shape = CircleShape,
+                        )
+                        .onGloballyPositioned { coordinates ->
+                            val bounds = coordinates.boundsInWindow()
+                            val origin = IntArray(2)
+                            pickerView.getLocationOnScreen(origin)
+                            DragGo.updateTargetBounds(
+                                key,
+                                Rect(
+                                    bounds.left + origin[0],
+                                    bounds.top + origin[1],
+                                    bounds.right + origin[0],
+                                    bounds.bottom + origin[1],
+                                ),
+                            )
+                        },
                 )
             }
         }
     }
 }
-
