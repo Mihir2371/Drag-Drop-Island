@@ -1173,7 +1173,6 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     val context = LocalContext.current
     val pickerView = androidx.compose.ui.platform.LocalView.current
     val density = LocalDensity.current
-    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     val targets by DragGo.targets.collectAsState()
     val selectedTarget by DragGo.selectedTarget.collectAsState()
     val scroll = rememberScrollState()
@@ -1184,38 +1183,32 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     LaunchedEffect(enabled, targets) {
         if (enabled && targets.isNotEmpty()) IslandBus.expanded.value = true
     }
-    // Keep the currently hovered destination in view as the row scrolls.
     LaunchedEffect(selectedTarget, targets) {
         val index = targets.indexOfFirst { DragGo.targetKey(it) == selectedTarget }
         if (index >= 0) {
-            val itemExtent = with(density) { 48.dp.roundToPx() }
-            scroll.animateScrollTo((index * itemExtent).coerceAtLeast(0))
+            scroll.animateScrollTo(index * with(density) { 42.dp.roundToPx() })
             pickerView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
         }
     }
     if (!enabled || targets.isEmpty() || islandBounds.isEmpty) return
 
-    // A real picker surface: wider than the camera capsule, centered on it, and
-    // attached just below the island. Clamp both edges so it never spills off-screen.
-    val pickerWidth = minOf(320.dp, (screenWidth - 24.dp).coerceAtLeast(1.dp))
-    val centeredX = with(density) { islandBounds.center.x.toDp() } - pickerWidth / 2
-    val maxX = (screenWidth - pickerWidth - 12.dp).coerceAtLeast(12.dp)
-    val x = centeredX.coerceIn(12.dp, maxX)
-    val y = with(density) { islandBounds.bottom.toDp() } + 8.dp
-    val pickerHeight = 56.dp
-
+    // Render the destination strip directly over the capsule, not as a separate panel below it.
+    val pickerWidth = with(density) { islandBounds.width.toDp() }.coerceAtLeast(128.dp)
+    val x = with(density) { islandBounds.left.toDp() }
+    val y = with(density) { islandBounds.top.toDp() }
+    val pickerHeight = with(density) { islandBounds.height.toDp() }.coerceAtLeast(48.dp)
     Box(Modifier.fillMaxSize().zIndex(40f)) {
         Row(
             Modifier
-                .offset(x = x, y = y.coerceAtLeast(0.dp))
+                .offset(x = x, y = y)
                 .width(pickerWidth)
                 .height(pickerHeight)
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color(0xF01A1A1C))
-                .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(28.dp))
+                .clip(RoundedCornerShape(50))
+                .background(Color(0xFF202126))
+                .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
                 .horizontalScroll(scroll)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             targets.forEach { target ->
@@ -1232,11 +1225,9 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                         }
                     },
                     modifier = Modifier
-                        .size(38.dp)
-                        .background(
-                            if (selected) Color.White.copy(alpha = 0.22f) else Color.Transparent,
-                            CircleShape,
-                        )
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(if (selected) Color.White.copy(alpha = 0.26f) else Color.Transparent, CircleShape)
                         .border(
                             width = if (selected) 1.5.dp else 0.dp,
                             color = if (selected) Color.White.copy(alpha = 0.95f) else Color.Transparent,
