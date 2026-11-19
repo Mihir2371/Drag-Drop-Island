@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.platform.AndroidView
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.akira.island.service.DragGo
@@ -120,6 +120,8 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import com.akira.island.core.BatteryInfo
 import com.akira.island.core.ChronoInfo
 import com.akira.island.core.Controls
