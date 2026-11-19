@@ -600,7 +600,7 @@ internal fun IslandBody(
     val playingArt = (primary as? Act.MediaA)?.m?.takeIf { it.playing }?.accent
     val lastArt = remember { arrayOf(Color.White) }
     if (playingArt != null) lastArt[0] = playingArt
-    val glowOn = s.fxGlow && !s.reduceEffects && !calibrating && playingArt != null
+    val glowOn = !dragGoMode && s.fxGlow && !s.reduceEffects && !calibrating && playingArt != null
     val glowAlpha by animateFloatAsState(if (glowOn) 1f else 0f, tween(500), label = "glowAlpha")
     val glowTint by animateColorAsState(lastArt[0], tween(500), label = "glowTint")
 
@@ -634,9 +634,9 @@ internal fun IslandBody(
     val tilt = IslandBus.glassTilt.collectAsState()
     val previewTilt = LocalGlassTilt.current
     val sheen = remember { Animatable(-1f) }
-    LaunchedEffect(primary.id, expanded, s.liquidGlass, s.reduceEffects) {
+    LaunchedEffect(primary.id, expanded, s.liquidGlass, s.reduceEffects, dragGoMode) {
         sheen.snapTo(-1f)
-        if (!s.liquidGlass || s.reduceEffects) return@LaunchedEffect
+        if (!s.liquidGlass || s.reduceEffects || dragGoMode) return@LaunchedEffect
         sheen.snapTo(0f)
         sheen.animateTo(1f, tween(850, easing = FastOutSlowInEasing))
         sheen.snapTo(-1f)
@@ -661,7 +661,7 @@ internal fun IslandBody(
     val backdropCoordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
     val backdropDensity = LocalDensity.current
     fun reportBackdrop() {
-        if (s.liquidGlass && !preview && onBackdropShape != null) {
+        if (s.liquidGlass && !dragGoMode && !preview && onBackdropShape != null) {
             val c = backdropCoordinates[0]?.takeIf { it.isAttached && it.size.width > 0 && it.size.height > 0 } ?: return
             val origin = c.localToWindow(Offset.Zero)
             val x = c.localToWindow(Offset(c.size.width.toFloat(), 0f))
@@ -677,7 +677,7 @@ internal fun IslandBody(
             }
         }
     }
-    DisposableEffect(onBackdropSampler, s.liquidGlass, s.notch, s.notchTopRadius, large, calibrating, egg, preview, backdropDensity) {
+    DisposableEffect(onBackdropSampler, s.liquidGlass, dragGoMode, s.notch, s.notchTopRadius, large, calibrating, egg, preview, backdropDensity) {
         onBackdropSampler?.invoke { reportBackdrop() }
         onDispose { onBackdropSampler?.invoke(null) }
     }
@@ -693,14 +693,17 @@ internal fun IslandBody(
                 transformOrigin = TransformOrigin(0.5f, 0f)
             }
             .onGloballyPositioned { backdropCoordinates[0] = it; reportBackdrop() }
-            .then(if (s.liquidGlass && !preview && onBackdropShape != null) Modifier.drawWithContent {
+            .then(if (s.liquidGlass && !dragGoMode && !preview && onBackdropShape != null) Modifier.drawWithContent {
                 reportBackdrop()
                 drawContent()
             } else Modifier)
-            .then(if (glowAlpha > 0f) Modifier.drawBehind { islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) } else Modifier)
+            .then(if (glowAlpha > 0f && !dragGoMode) Modifier.drawBehind { islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) } else Modifier)
             .then(
                 if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)
-                else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value }, sheen = { sheen.value }),
+                else Modifier.islandSurface(
+                    if (dragGoMode) s.copy(liquidGlass = false, fxGlow = false, fxBlur = false) else s,
+                    large, shape, accent, tilt = { previewTilt ?: tilt.value }, sheen = { sheen.value },
+                ),
             )
             .then(
                 if (egg && !calibrating) {
@@ -823,7 +826,7 @@ internal fun IslandBody(
                 change.using(SizeTransform(clip = true) { _, _ -> islandSpec(s) })
             },
         ) { f ->
-            Box((if (s.liquidExpand) liquidFlow(f.key, frames, widths, s) else classicFlow(s))
+            Box((if (s.liquidExpand) liquidFlow(f.key, frames, widths, if (dragGoMode) s.copy(fxBlur = false) else s) else classicFlow(if (dragGoMode) s.copy(fxBlur = false) else s))
                 .graphicsLayer { alpha = if (dragGoMode) 0f else 1f }) {
                 // Drag & Go hides normal island content; keep its measured layout compact too.
                 // Otherwise the invisible ExpandedContent still reserves a tall blank area above the app row.
