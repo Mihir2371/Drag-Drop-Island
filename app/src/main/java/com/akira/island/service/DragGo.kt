@@ -20,6 +20,8 @@ internal object DragGo {
     // Session lifecycle is independent of the destination list: targets can be empty
     // briefly while Android delivers drag-enter/exit events.
     private val _sessionActive = MutableStateFlow(false)
+    private val _edgeScroll = MutableStateFlow(0)
+    val edgeScroll = _edgeScroll.asStateFlow()
     val sessionActive = _sessionActive.asStateFlow()
     private val targetBounds = mutableMapOf<String, Rect>()
     private var pendingMimeTypes: List<String> = emptyList()
@@ -39,6 +41,7 @@ internal object DragGo {
 
     fun dismiss() {
         _sessionActive.value = false
+        _edgeScroll.value = 0
         pendingMimeTypes = emptyList()
         preparedForCurrentDrag = false
         targetBounds.clear()
@@ -97,6 +100,13 @@ internal object DragGo {
         return launched
     }
 
+    private fun edgeDirection(x: Float, rects: List<Rect>, context: Context): Int {
+        val edge = 36f * context.resources.displayMetrics.density
+        val left = rects.filterNot { it.isEmpty }.minOfOrNull { it.left } ?: return 0
+        val right = rects.filterNot { it.isEmpty }.maxOfOrNull { it.right } ?: return 0
+        return when { x <= left + edge -> -1; x >= right - edge -> 1; else -> 0 }
+    }
+
     fun accepts(event: DragEvent): Boolean {
         val description = event.clipDescription ?: return false
         return (0 until description.mimeTypeCount).any { i ->
@@ -128,7 +138,7 @@ internal object DragGo {
         screenOrigin: () -> IntArray,
         enabled: () -> Boolean,
     ): View.OnDragListener =
-        View.OnDragListener { _, event ->
+        View.OnDragListener { hostView, event ->
             if (!enabled()) {
                 if (_targets.value.isNotEmpty()) dismiss()
                 return@OnDragListener false
@@ -145,29 +155,37 @@ internal object DragGo {
                 DragEvent.ACTION_DRAG_ENTERED -> {
                     if (!isOverIsland(event.x, event.y, bounds())) {
                         _selectedTarget.value = null
+                        _edgeScroll.value = 0
                         false
                     } else {
                         prepareTargets(context, event)
                         val origin = screenOrigin()
-                        selectAt(origin[0] + event.x, origin[1] + event.y)
+                        val screenX = origin[0] + event.x
+                        selectAt(screenX, origin[1] + event.y)
+                        _edgeScroll.value = edgeDirection(screenX, bounds(), context)
                         true
                     }
                 }
                 DragEvent.ACTION_DRAG_LOCATION -> {
                     if (!isOverIsland(event.x, event.y, bounds())) {
                         _selectedTarget.value = null
+                        _edgeScroll.value = 0
                         false
                     } else {
                         val origin = screenOrigin()
-                        selectAt(origin[0] + event.x, origin[1] + event.y)
+                        val screenX = origin[0] + event.x
+                        selectAt(screenX, origin[1] + event.y)
+                        _edgeScroll.value = edgeDirection(screenX, bounds(), context)
                         true
                     }
                 }
                 DragEvent.ACTION_DRAG_EXITED -> {
+                    _edgeScroll.value = 0
                     _selectedTarget.value = null
                     true
                 }
                 DragEvent.ACTION_DROP -> {
+                    _edgeScroll.value = 0
                     val origin = screenOrigin()
                     selectAt(origin[0] + event.x, origin[1] + event.y)
                     sendToTarget(context, event)

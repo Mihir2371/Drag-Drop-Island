@@ -1176,6 +1176,15 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     val targets by DragGo.targets.collectAsState()
     val selectedTarget by DragGo.selectedTarget.collectAsState()
     val scroll = rememberScrollState()
+    val edgeDirection by DragGo.edgeScroll.collectAsState()
+
+    LaunchedEffect(edgeDirection) {
+        if (edgeDirection == 0) return@LaunchedEffect
+        while (DragGo.edgeScroll.value != 0) {
+            scroll.scrollBy(edgeDirection * 24f)
+            kotlinx.coroutines.delay(55)
+        }
+    }
 
     LaunchedEffect(enabled) {
         if (!enabled) DragGo.dismiss()
