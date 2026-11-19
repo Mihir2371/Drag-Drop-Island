@@ -44,7 +44,7 @@ internal object DragGo {
     }
 
     fun isOverIsland(x: Float, y: Float, bounds: List<Rect>) =
-        bounds.any { !it.isEmpty && it.contains(x, y) }
+        bounds.any { !it.isEmpty && it.contains(androidx.compose.ui.geometry.Offset(x, y)) }
 
     private fun mimeFor(context: Context, event: DragEvent, uri: Uri?): String {
         uri?.let { runCatching { context.contentResolver.getType(it) }.getOrNull()?.let { return it } }
