@@ -65,7 +65,7 @@ jobs:
 
       # Gradle собирает APK без подписи: ключ ему не нужен, и сторонний код сборки его не увидит
       - name: Сборка
-        run: ./gradlew --no-daemon --max-workers=4 testDebugUnitTest lintDebug assembleRelease
+        run: ./gradlew --no-daemon --max-workers=4 testDebugUnitTest lintDebug assembleDebug assembleRelease
 
       # Подпись — отдельным шагом: ключ из секретов есть только здесь и сразу удаляется
       - name: Подпись
@@ -112,9 +112,19 @@ jobs:
           fi
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
-      # Тестовые APK лежат неделю: потом пропадают сами, а версии для всех — в релизах
+      # Always upload a test APK. Use release-signed APK if available, otherwise Gradle's debug-signed APK.
+      - name: Prepare APK artifact
+        run: |
+          mkdir -p out
+          if [[ "${{ steps.sign.outputs.signed }}" == "true" ]]; then
+            echo "Using release-signed APK"
+          else
+            cp app/build/outputs/apk/debug/app-debug.apk out/DynamicIsland.apk
+            echo "::notice::No release signing secrets; uploading debug-signed APK for testing"
+          fi
+
+      # APK download is retained for a week.
       - uses: actions/upload-artifact@v4
-        if: steps.sign.outputs.signed == 'true'
         with:
           name: DynamicIsland-apk
           path: out/DynamicIsland.apk
