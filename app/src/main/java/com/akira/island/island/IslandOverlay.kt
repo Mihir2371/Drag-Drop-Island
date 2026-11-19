@@ -1161,57 +1161,54 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean) {
     val targets by DragGo.targets.collectAsState()
     LaunchedEffect(enabled) { if (!enabled) DragGo.dismiss() }
     if (!enabled || targets.isEmpty()) return
-    val shape = RoundedCornerShape(if (notch) 0.dp else 26.dp, if (notch) 0.dp else 26.dp, 26.dp, 26.dp)
+
+    // Keep the destination strip inside the island's existing touch window so ordinary
+    // screen gestures are not intercepted by a full-width overlay.
     Box(
         Modifier.fillMaxSize().zIndex(40f),
         contentAlignment = Alignment.TopCenter,
     ) {
-        Column(
+        Row(
             Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = 42.dp)
                 .fillMaxWidth(0.94f)
-                .clip(shape)
-                .background(Color(0xFF171719))
-                .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Text(
-                    tr("Drag & Go · Отправить", "Drag & Go · Send to"),
-                    color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
+            targets.forEach { target ->
+                AndroidView(
+                    factory = { ctx ->
+                        ImageView(ctx).apply {
+                            setImageDrawable(target.loadIcon(ctx.packageManager))
+                            contentDescription = target.loadLabel(ctx.packageManager).toString()
+                            scaleType = ImageView.ScaleType.FIT_CENTER
+                        }
+                    },
+                    update = {
+                        it.setImageDrawable(target.loadIcon(context.packageManager))
+                        it.contentDescription = target.loadLabel(context.packageManager).toString()
+                    },
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clickable {
+                            performPickerHaptic(context)
+                            DragGo.launchTarget(context, target)
+                        },
                 )
-                androidx.compose.material3.Text(
-                    "×", color = Color.White, fontSize = 22.sp,
-                    modifier = Modifier.clickable { DragGo.dismiss() }.padding(horizontal = 8.dp),
-                )
-            }
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                targets.forEach { target ->
-                    val label = target.loadLabel(context.packageManager).toString()
-                    Column(
-                        Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF2B2B2D))
-                            .clickable { DragGo.launchTarget(context, target) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                            .width(66.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        AndroidView(
-                            factory = { ctx -> ImageView(ctx).apply { setImageDrawable(target.loadIcon(ctx.packageManager)) } },
-                            update = { it.setImageDrawable(target.loadIcon(context.packageManager)) },
-                            modifier = Modifier.size(32.dp),
-                        )
-                        androidx.compose.material3.Text(
-                            label, color = Color.White, fontSize = 10.sp,
-                            maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        )
-                    }
-                }
             }
         }
+    }
+}
+
+private fun performPickerHaptic(context: Context) {
+    val vibrator = context.getSystemService(android.os.Vibrator::class.java)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        vibrator?.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_TICK))
+    } else {
+        @Suppress("DEPRECATION")
+        vibrator?.vibrate(12)
     }
 }
