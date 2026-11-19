@@ -17,6 +17,10 @@ internal object DragGo {
     val targets = _targets.asStateFlow()
     private val _selectedTarget = MutableStateFlow<String?>(null)
     val selectedTarget = _selectedTarget.asStateFlow()
+    // Session lifecycle is independent of the destination list: targets can be empty
+    // briefly while Android delivers drag-enter/exit events.
+    private val _sessionActive = MutableStateFlow(false)
+    val sessionActive = _sessionActive.asStateFlow()
     private val targetBounds = mutableMapOf<String, Rect>()
     private var pendingMimeTypes: List<String> = emptyList()
     private var preparedForCurrentDrag = false
@@ -34,6 +38,7 @@ internal object DragGo {
     }
 
     fun dismiss() {
+        _sessionActive.value = false
         pendingMimeTypes = emptyList()
         preparedForCurrentDrag = false
         targetBounds.clear()
@@ -130,8 +135,12 @@ internal object DragGo {
             }
             when (event.action) {
                 DragEvent.ACTION_DRAG_STARTED -> {
+                    // Start a fresh session only for supported payloads. Keep this
+                    // signal alive through Android's transient enter/exit callbacks.
                     dismiss()
-                    accepts(event)
+                    val accepted = accepts(event)
+                    _sessionActive.value = accepted
+                    accepted
                 }
                 DragEvent.ACTION_DRAG_ENTERED -> {
                     if (!isOverIsland(event.x, event.y, bounds())) {
@@ -164,7 +173,7 @@ internal object DragGo {
                     sendToTarget(context, event)
                 }
                 DragEvent.ACTION_DRAG_ENDED -> {
-                    // Always release ResolveInfo/ClipDescription-derived state, including successful drops elsewhere.
+                    // End session on every system completion path, including drops outside the island.
                     dismiss()
                     true
                 }

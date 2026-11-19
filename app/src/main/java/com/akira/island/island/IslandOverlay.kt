@@ -190,6 +190,7 @@ fun IslandOverlay(
     val foreground by IslandBus.foregroundPackage.collectAsState()
     val expanded by IslandBus.expanded.collectAsState()
     val dragGoTargets by DragGo.targets.collectAsState()
+    val dragGoSession by DragGo.sessionActive.collectAsState()
     val dragGoMode = saved.dragGoEnabled && dragGoTargets.isNotEmpty()
     val focus by IslandBus.focus.collectAsState()
     val calibrating by IslandBus.calibrating.collectAsState()
@@ -391,7 +392,9 @@ fun IslandOverlay(
     }
     val timedHidden = autoHideEligible && idleTimedOut
     // Explicitly hiding the empty capsule retains its previous non-interactive behavior.
-    val hidden = timedHidden || s.hideIdle && primary is Act.Idle && secondary == null && !showExpanded && !calibrating && !(s.evLock && keyguard)
+    // A live drag is a transient system-owned session; inactivity timers must not
+    // remove the destination surface while Android is delivering drag callbacks.
+    val hidden = !dragGoSession && (timedHidden || s.hideIdle && primary is Act.Idle && secondary == null && !showExpanded && !calibrating && !(s.evLock && keyguard))
     val wakeBounds = remember { mutableStateOf(Rect.Zero) }
 
     // Спрятанный остров не ловит касания, даже пока уходит
