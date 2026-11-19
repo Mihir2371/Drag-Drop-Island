@@ -211,7 +211,7 @@ fun BehaviorScreen(onBack: () -> Unit) {
             GroupToggle(Pos.Middle, Icons.Rounded.BatteryChargingFull, tr("Оценивать время зарядки", "Estimate charging time"),
                 tr("Если Android не дал оценку — приблизительно, после двух измеренных изменений заряда", "When Android provides no estimate, approximate after two measured increases"),
                 s.adaptiveChargeEta, color = Tile.Green) { value -> SettingsRepo.update { copy(adaptiveChargeEta = value) } }
-            GroupToggle(Pos.Last, Icons.Rounded.DragIndicator, tr("Drag & Go", "Drag & Go"),
+            GroupToggle(Pos.Last, Icons.Rounded.TouchApp, tr("Drag & Go", "Drag & Go"),
                 tr("Drop text or media on the island to show compatible apps", "Drop text or media on the island to show compatible apps"),
                 s.dragGoEnabled, color = Tile.Teal) { value -> SettingsRepo.update { copy(dragGoEnabled = value) } }
         }
