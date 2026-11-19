@@ -399,7 +399,7 @@ class IslandService : AccessibilityService() {
         }
         drawRoot.addView(compose)
         // Drag & Go: accept text/images only when the drop lands on the island or bubble.
-        drawRoot.setOnDragListener(DragGo.listener(this) { listOf(body, bubble) })
+        drawRoot.setOnDragListener(DragGo.listener(this, { listOf(body, bubble) }, { SettingsRepo.current.dragGoEnabled }))
         drawRoot.viewTreeObserver.addOnPreDrawListener {
             // Sample animated graphics-layer transforms even when content itself is cached.
             backdropSampler?.invoke()
