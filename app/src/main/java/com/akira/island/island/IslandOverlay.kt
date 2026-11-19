@@ -415,7 +415,7 @@ fun IslandOverlay(
 
     // Остров меряется по своему размеру, а не по окну, и стоит сверху по центру окна
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        DragGoIslandTargets(enabled = saved.dragGoEnabled, notch = s.notch)
+        DragGoIslandTargets(enabled = saved.dragGoEnabled, notch = s.notch, islandBounds = body.value)
         // Оплата: волны NFC и вспышка успеха вокруг острова, как в ролике
         if (!calibrating) PayEffects(primary, { body.value }, s)
         // Пасхалка: свечение за островом, вспышки и звёзды поверх
@@ -1156,27 +1156,30 @@ internal fun groupedProgress(items: List<com.akira.island.core.ProgressInfo>): c
  
 /** Custom app destination panel rendered within the island overlay window. */
 @Composable
-private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean) {
+private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: Rect) {
     val context = LocalContext.current
     val pickerView = androidx.compose.ui.platform.LocalView.current
+    val density = LocalDensity.current
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     val targets by DragGo.targets.collectAsState()
+    val scroll = rememberScrollState()
     LaunchedEffect(enabled) { if (!enabled) DragGo.dismiss() }
-    if (!enabled || targets.isEmpty()) return
+    if (!enabled || targets.isEmpty() || islandBounds.isEmpty) return
 
-    // Keep the destination strip inside the island's existing touch window so ordinary
-    // screen gestures are not intercepted by a full-width overlay.
-    Box(
-        Modifier.fillMaxSize().zIndex(40f),
-        contentAlignment = Alignment.TopCenter,
-    ) {
+    // Anchor the picker to the measured island bounds instead of the full-screen parent.
+    // Its width is deliberately capped so the strip remains a compact island accessory.
+    val pickerWidth = minOf(320.dp, screenWidth - 24.dp)
+    val x = with(density) { islandBounds.center.x.toDp() } - pickerWidth / 2
+    val y = with(density) { islandBounds.bottom.toDp() } + 8.dp
+    Box(Modifier.fillMaxSize().zIndex(40f)) {
         Row(
             Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = 42.dp)
-                .fillMaxWidth(0.94f)
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                .offset(x = x.coerceAtLeast(12.dp), y = y)
+                .width(pickerWidth)
+                .height(58.dp)
+                .horizontalScroll(scroll)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             targets.forEach { target ->
@@ -1192,12 +1195,10 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean) {
                         it.setImageDrawable(target.loadIcon(context.packageManager))
                         it.contentDescription = target.loadLabel(context.packageManager).toString()
                     },
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clickable {
-                            pickerView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
-                            DragGo.launchTarget(context, target)
-                        },
+                    modifier = Modifier.size(42.dp).clickable {
+                        pickerView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                        DragGo.launchTarget(context, target)
+                    },
                 )
             }
         }
