@@ -1164,19 +1164,26 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     val targets by DragGo.targets.collectAsState()
     val scroll = rememberScrollState()
     LaunchedEffect(enabled) { if (!enabled) DragGo.dismiss() }
+    // Preparing a destination list means a valid drag has reached the island.
+    // Expand the capsule before measuring the picker so the destinations live inside it.
+    LaunchedEffect(enabled, targets) {
+        if (enabled && targets.isNotEmpty()) IslandBus.expanded.value = true
+    }
     if (!enabled || targets.isEmpty() || islandBounds.isEmpty) return
 
-    // Anchor the picker to the measured island bounds instead of the full-screen parent.
-    // Its width is deliberately capped so the strip remains a compact island accessory.
-    val pickerWidth = minOf(320.dp, screenWidth - 24.dp)
+    // Keep the destination row inside the expanded island body, not as a separate strip
+    // below the capsule. The measured width follows the island's expanded bounds.
+    val islandWidth = with(density) { islandBounds.width.toDp() }
+    val pickerWidth = minOf(320.dp, screenWidth - 24.dp, islandWidth)
     val x = with(density) { islandBounds.center.x.toDp() } - pickerWidth / 2
-    val y = with(density) { islandBounds.bottom.toDp() } + 8.dp
+    val pickerHeight = 58.dp
+    val y = with(density) { islandBounds.bottom.toDp() } - pickerHeight - 4.dp
     Box(Modifier.fillMaxSize().zIndex(40f)) {
         Row(
             Modifier
-                .offset(x = x.coerceAtLeast(12.dp), y = y)
+                .offset(x = x.coerceAtLeast(12.dp), y = y.coerceAtLeast(0.dp))
                 .width(pickerWidth)
-                .height(58.dp)
+                .height(pickerHeight)
                 .horizontalScroll(scroll)
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
