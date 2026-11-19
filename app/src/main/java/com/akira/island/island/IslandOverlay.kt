@@ -1185,29 +1185,34 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     LaunchedEffect(selectedTarget, targets) {
         val index = targets.indexOfFirst { DragGo.targetKey(it) == selectedTarget }
         if (index >= 0) {
-            val itemExtent = with(density) { 54.dp.roundToPx() }
+            val itemExtent = with(density) { 48.dp.roundToPx() }
             scroll.animateScrollTo((index * itemExtent).coerceAtLeast(0))
             pickerView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
         }
     }
     if (!enabled || targets.isEmpty() || islandBounds.isEmpty) return
 
-    val islandWidth = with(density) { islandBounds.width.toDp() }
-    val pickerWidth = minOf(320.dp, screenWidth - 24.dp, islandWidth)
-    val x = with(density) { islandBounds.center.x.toDp() } - pickerWidth / 2
-    // Keep the compact destination row directly under the capsule instead of pinning
-    // it to the bottom of the expanded overlay (which creates a large empty gap).
-    val pickerHeight = 48.dp
-    val y = with(density) { islandBounds.top.toDp() } + 40.dp
+    // A real picker surface: wider than the camera capsule, centered on it, and
+    // attached just below the island. Clamp both edges so it never spills off-screen.
+    val pickerWidth = minOf(320.dp, (screenWidth - 24.dp).coerceAtLeast(1.dp))
+    val centeredX = with(density) { islandBounds.center.x.toDp() } - pickerWidth / 2
+    val maxX = (screenWidth - pickerWidth - 12.dp).coerceAtLeast(12.dp)
+    val x = centeredX.coerceIn(12.dp, maxX)
+    val y = with(density) { islandBounds.bottom.toDp() } + 8.dp
+    val pickerHeight = 56.dp
+
     Box(Modifier.fillMaxSize().zIndex(40f)) {
         Row(
             Modifier
-                .offset(x = x.coerceAtLeast(12.dp), y = y.coerceAtLeast(0.dp))
+                .offset(x = x, y = y.coerceAtLeast(0.dp))
                 .width(pickerWidth)
                 .height(pickerHeight)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color(0xF01A1A1C))
+                .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(28.dp))
                 .horizontalScroll(scroll)
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             targets.forEach { target ->
@@ -1226,7 +1231,7 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                     modifier = Modifier
                         .size(38.dp)
                         .background(
-                            if (selected) Color.White.copy(alpha = 0.20f) else Color.Transparent,
+                            if (selected) Color.White.copy(alpha = 0.22f) else Color.Transparent,
                             CircleShape,
                         )
                         .border(
