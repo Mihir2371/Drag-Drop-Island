@@ -16,9 +16,11 @@ internal object DragGo {
     private val _targets = MutableStateFlow<List<ResolveInfo>>(emptyList())
     val targets = _targets.asStateFlow()
     private var pendingSend: Intent? = null
+    private var preparedClip: ClipData? = null
 
     fun dismiss() {
         pendingSend = null
+        preparedClip = null
         _targets.value = emptyList()
     }
 
@@ -61,6 +63,7 @@ internal object DragGo {
     fun drop(context: Context, event: DragEvent): Boolean {
         val clip = event.clipData ?: return false
         if (clip.itemCount == 0) return false
+        if (preparedClip === clip && _targets.value.isNotEmpty()) return true
         val item = clip.getItemAt(0)
         val uri = item.uri
         val text = item.text?.toString() ?: item.intent?.toUri(Intent.URI_INTENT_SCHEME)
@@ -92,6 +95,7 @@ internal object DragGo {
             return true
         }
         pendingSend = send
+        preparedClip = clip
         _targets.value = compatible
         return true
     }
@@ -104,10 +108,12 @@ internal object DragGo {
             }
             when (event.action) {
                 DragEvent.ACTION_DRAG_STARTED -> accepts(event)
-                DragEvent.ACTION_DRAG_ENTERED, DragEvent.ACTION_DRAG_LOCATION ->
-                    isOverIsland(event.x, event.y, bounds())
+                DragEvent.ACTION_DRAG_ENTERED, DragEvent.ACTION_DRAG_LOCATION -> {
+                    if (!isOverIsland(event.x, event.y, bounds())) false else drop(context, event)
+                }
                 DragEvent.ACTION_DRAG_EXITED -> true
                 DragEvent.ACTION_DROP -> isOverIsland(event.x, event.y, bounds()) && drop(context, event)
+                // Keep the destination list visible after the source finishes dragging.
                 DragEvent.ACTION_DRAG_ENDED -> true
                 else -> false
             }
