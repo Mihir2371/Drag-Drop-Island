@@ -3,6 +3,23 @@ package com.akira.island.island
 import android.content.Context
 import android.os.Build
 import android.os.SystemClock
+import android.widget.ImageView
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.AndroidView
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.akira.island.service.DragGo
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ContentTransform
@@ -396,6 +413,7 @@ fun IslandOverlay(
 
     // Остров меряется по своему размеру, а не по окну, и стоит сверху по центру окна
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        DragGoIslandTargets(enabled = saved.dragGoEnabled, notch = s.notch)
         // Оплата: волны NFC и вспышка успеха вокруг острова, как в ролике
         if (!calibrating) PayEffects(primary, { body.value }, s)
         // Пасхалка: свечение за островом, вспышки и звёзды поверх
@@ -1132,4 +1150,65 @@ internal fun groupedProgress(items: List<com.akira.island.core.ProgressInfo>): c
     return first.copy(key = "downloads", title = trf("Загрузок: {0}", "Downloads: {0}", items.size),
         progress = (items.sumOf { it.fraction.toDouble() } / items.size * 1000).toInt(), max = 1000,
         indeterminate = unknown, transferDetails = null)
+}
+ 
+/** Custom app destination panel rendered within the island overlay window. */
+@Composable
+private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean) {
+    val context = LocalContext.current
+    val targets by DragGo.targets.collectAsState()
+    if (!enabled || targets.isEmpty()) return
+    val shape = RoundedCornerShape(if (notch) 0.dp else 26.dp, if (notch) 0.dp else 26.dp, 26.dp, 26.dp)
+    Box(
+        Modifier.fillMaxSize().zIndex(40f),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Column(
+            Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = 42.dp)
+                .fillMaxWidth(0.94f)
+                .clip(shape)
+                .background(Color(0xFF171719))
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Text(
+                    tr("Drag & Go · Отправить", "Drag & Go · Send to"),
+                    color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.Text(
+                    "×", color = Color.White, fontSize = 22.sp,
+                    modifier = Modifier.clickable { DragGo.dismiss() }.padding(horizontal = 8.dp),
+                )
+            }
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                targets.forEach { target ->
+                    val label = target.loadLabel(context.packageManager).toString()
+                    Column(
+                        Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF2B2B2D))
+                            .clickable { DragGo.launchTarget(context, target) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .width(66.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        AndroidView(
+                            factory = { ctx -> ImageView(ctx).apply { setImageDrawable(target.loadIcon(ctx.packageManager)) } },
+                            update = { it.setImageDrawable(target.loadIcon(context.packageManager)) },
+                            modifier = Modifier.size(32.dp),
+                        )
+                        androidx.compose.material3.Text(
+                            label, color = Color.White, fontSize = 10.sp,
+                            maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
