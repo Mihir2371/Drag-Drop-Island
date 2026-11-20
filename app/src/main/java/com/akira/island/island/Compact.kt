@@ -170,40 +170,7 @@ private fun CompactContentBody(act: Act, s: IslandSettings, wideWidth: Dp) {
     val icon = h * 0.5f
     when (act) {
         // Пустая капсула: при желании часы слева от камеры, актуальный заряд справа.
-        is Act.Idle -> {
-            val keyguard by IslandBus.keyguard.collectAsState()
-            val realBattery by IslandBus.battery.collectAsState()
-            val battery = if (LocalIslandPreview.current) com.akira.island.core.BatteryInfo(72) else realBattery
-            if (s.idleClockBattery) {
-                val now = rememberWallNow(1000)
-                val context = LocalContext.current
-                CompactRow(s.height.dp, gap, side,
-                    left = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (s.evLock && keyguard) {
-                                Icon(Ios.lock, null, tint = Color.White, modifier = Modifier.size(12.dp))
-                                Spacer(Modifier.width(4.dp))
-                            }
-                            Text(DateFormat.getTimeFormat(context).format(Date(now)), color = Color.White, fontSize = 13.sp, style = Digits)
-                        }
-                    },
-                    right = {
-                        if (battery.level >= 0) Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("${battery.level}%", color = if (battery.level <= 15) Tints.Red else Color.White, fontSize = 12.sp, style = Digits)
-                            if (!s.batteryPercentOnly) {
-                                Spacer(Modifier.width(4.dp))
-                                BatteryGlyph(battery.level, if (battery.charging) Tints.Green else Color.White, Modifier.size(22.dp, 11.dp))
-                            }
-                        }
-                    },
-                )
-            } else Box(Modifier.size(s.width.dp, s.height.dp), contentAlignment = Alignment.CenterStart) {
-                AnimatedVisibility(s.evLock && keyguard, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
-                    Icon(Ios.lock, null, tint = Color.White, modifier = Modifier.padding(start = s.height.dp * 0.38f).size(s.height.dp * 0.46f))
-                }
-            }
-        }
-
+        is Act.Idle -> Box(Modifier.size(s.width.dp, s.height.dp))
         is Act.HotspotA -> CompactRow(h, gap, side,
             left = { Icon(Icons.Rounded.WifiTethering, tr("Точка доступа", "Hotspot"), tint = Tints.Blue, modifier = Modifier.size(icon)) },
             right = { Text(act.status.clients?.toString() ?: tr("Вкл", "On"), color = Color.White,
