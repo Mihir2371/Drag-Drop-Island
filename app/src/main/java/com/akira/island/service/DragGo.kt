@@ -7,6 +7,9 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.ResolveInfo
 import android.net.Uri
+import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
+import java.io.File
 import android.view.DragEvent
 import android.view.DragAndDropPermissions
 import android.view.View
@@ -90,6 +93,20 @@ internal object DragGo {
         _targets.value = compatible
     }
 
+    private fun copyToShareCache(context: Context, source: Uri, mime: String): Uri? {
+        return runCatching {
+            val dir = File(context.cacheDir, "draggo").apply { mkdirs() }
+            // Remove stale copies so temporary shared images don't accumulate indefinitely.
+            dir.listFiles()?.filter { it.isFile && it.lastModified() < System.currentTimeMillis() - 24L * 60L * 60L * 1000L }?.forEach { it.delete() }
+            val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)?.takeIf { it.isNotBlank() } ?: "dat"
+            val file = File(dir, "drop-${System.currentTimeMillis()}.$extension")
+            context.contentResolver.openInputStream(source)?.use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            } ?: return null
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        }.getOrNull()
+    }
+
     private fun sendToTarget(context: Context, event: DragEvent): Boolean {
         val clip = event.clipData ?: return false
         if (clip.itemCount == 0) return false
@@ -106,6 +123,12 @@ internal object DragGo {
         val mime = mimeFor(context, event, uri)
         val isText = mime.startsWith("text/") || mime == "application/uri-list"
         if (uri == null && text.isNullOrBlank()) return false
+        // Drag source grants may expire when the drag session ends; share an app-owned copy.
+        val outgoingUri = if (!isText && uri != null) copyToShareCache(context, uri, mime) ?: run {
+            android.widget.Toast.makeText(context, "Couldn't read the dropped image.", android.widget.Toast.LENGTH_SHORT).show()
+            dismiss()
+            return false
+        } else uri
         val send = Intent(Intent.ACTION_SEND).apply {
             setType(mime)
             if (isText) {
@@ -116,10 +139,9 @@ internal object DragGo {
                     ClipData.newPlainText("Drag & Go", text)
                 }
             } else if (uri != null) {
-                putExtra(Intent.EXTRA_STREAM, uri)
-                // Keep the stream in ClipData too so destination apps receive read access
-                // through the standard Android sharing contract.
-                clipData = ClipData.newUri(context.contentResolver, "Drag & Go", uri)
+                putExtra(Intent.EXTRA_STREAM, outgoingUri)
+                // Send an app-owned cache URI with an explicit read grant.
+                clipData = ClipData.newUri(context.contentResolver, "Drag & Go", outgoingUri)
             } else {
                 putExtra(Intent.EXTRA_TEXT, text)
                 clipData = ClipData.newPlainText("Drag & Go", text)
