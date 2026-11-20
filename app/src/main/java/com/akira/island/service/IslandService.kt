@@ -441,7 +441,7 @@ class IslandService : AccessibilityService() {
         ))
         runCatching { wm?.addView(touchRoot, touchParams) }.onSuccess { touch = touchRoot }
         scope.launch {
-            DragGo.sessionActive.collect { active -> handler.post { updateTouchWindow(forceFullscreen = active) } }
+            DragGo.sessionActive.collect { handler.post { updateTouchWindow() } }
         }
         scope.launch {
             combine(SettingsRepo.state, IslandBus.expanded, IslandBus.screenOn, IslandBus.powerSave, IslandBus.locked) {
