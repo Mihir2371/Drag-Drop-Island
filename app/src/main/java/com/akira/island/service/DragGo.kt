@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.ResolveInfo
 import android.net.Uri
 import android.view.DragEvent
+import android.view.DragAndDropPermissions
 import android.view.View
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,7 @@ internal object DragGo {
     private val targetBounds = mutableMapOf<String, Rect>()
     private var pendingMimeTypes: List<String> = emptyList()
     private var preparedForCurrentDrag = false
+    private var dragPermissions: DragAndDropPermissions? = null
 
     fun targetKey(info: ResolveInfo): String =
         info.activityInfo?.let { "${it.packageName}/${it.name}" }.orEmpty()
@@ -42,6 +44,8 @@ internal object DragGo {
     }
 
     fun dismiss() {
+        dragPermissions?.release()
+        dragPermissions = null
         _sessionActive.value = false
         _edgeScroll.value = 0
         pendingMimeTypes = emptyList()
@@ -114,7 +118,9 @@ internal object DragGo {
         }
         val launchResult = runCatching { context.startActivity(send) }
         if (launchResult.isFailure) {
-            android.widget.Toast.makeText(context, "Couldn't send to this app. Try another destination.", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, "Couldn't open ${activity.packageName} for sharing. Try another destination.", android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            android.widget.Toast.makeText(context, "Opening ${activity.packageName}…", android.widget.Toast.LENGTH_SHORT).show()
         }
         dismiss()
         return launchResult.isSuccess
@@ -169,6 +175,9 @@ internal object DragGo {
                     // signal alive through Android's transient enter/exit callbacks.
                     dismiss()
                     val accepted = accepts(event)
+                    if (accepted && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                        dragPermissions = hostView.requestDragAndDropPermissions(event)
+                    }
                     _sessionActive.value = accepted
                     accepted
                 }
