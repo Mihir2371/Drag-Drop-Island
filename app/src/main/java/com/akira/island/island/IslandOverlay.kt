@@ -835,7 +835,7 @@ internal fun IslandBody(
                 // Drag & Go hides normal island content; keep its measured layout compact too.
                 // Otherwise the invisible ExpandedContent still reserves a tall blank area above the app row.
                 if (dragGoMode) {
-                    Spacer(Modifier.width(expandedWidth).height(h.coerceAtLeast(76.dp)))
+                    Spacer(Modifier.width(expandedWidth).height(h.coerceAtLeast(92.dp)))
                 } else if (f.expanded) {
                     ExpandedContent(f.act, s, lyrics, battery, expandedWidth)
                 } else {
@@ -1184,8 +1184,8 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     LaunchedEffect(edgeDirection) {
         if (edgeDirection == 0) return@LaunchedEffect
         while (DragGo.edgeScroll.value != 0) {
-            scroll.scrollBy(edgeDirection * 24f)
-            kotlinx.coroutines.delay(55)
+            scroll.scrollBy(edgeDirection * 5.5f)
+            kotlinx.coroutines.delay(16)
         }
     }
 
@@ -1203,7 +1203,6 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     LaunchedEffect(selectedTarget, targets) {
         val index = targets.indexOfFirst { DragGo.targetKey(it) == selectedTarget }
         if (index >= 0) {
-            scroll.animateScrollTo(index * with(density) { 56.dp.roundToPx() })
             pickerView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
         }
     }
@@ -1214,7 +1213,7 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
     val pickerWidth = with(density) { islandBounds.width.toDp() }.coerceAtLeast(128.dp)
     val x = with(density) { islandBounds.left.toDp() }
     val y = with(density) { islandBounds.top.toDp() }
-    val pickerHeight = with(density) { islandBounds.height.toDp() }.coerceAtLeast(76.dp)
+    val pickerHeight = with(density) { islandBounds.height.toDp() }.coerceAtLeast(92.dp)
     Box(Modifier.fillMaxSize().zIndex(40f)) {
         Row(
             Modifier
@@ -1242,7 +1241,8 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                         }
                     },
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(46.dp)
+                        .graphicsLayer { val scale = if (selected) 1.08f else 1f; scaleX = scale; scaleY = scale }
                         .clip(CircleShape)
                         .background(if (selected) Color.White.copy(alpha = 0.26f) else Color.Transparent, CircleShape)
                         .border(
