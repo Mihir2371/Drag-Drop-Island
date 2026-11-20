@@ -180,7 +180,11 @@ internal object DragGo {
         bounds.any { !it.isEmpty && it.contains(androidx.compose.ui.geometry.Offset(x, y)) }
 
     private fun mimeFor(context: Context, event: DragEvent, uri: Uri?): String {
-        uri?.let { runCatching { context.contentResolver.getType(it) }.getOrNull()?.let { return it } }
+        // Prefer the provider's concrete MIME. URI-list is only a transport MIME,
+        // not the actual file type.
+        uri?.let { runCatching { context.contentResolver.getType(it) }.getOrNull()?.let { type ->
+            if (type != "text/uri-list" && type != "application/uri-list") return type
+        } }
         val description = event.clipDescription
         if (description != null) {
             for (i in 0 until description.mimeTypeCount) {
@@ -188,7 +192,11 @@ internal object DragGo {
                 if (type != "text/uri-list" && type != "application/uri-list") return type
             }
         }
-        return "text/plain"
+        uri?.let {
+            val extension = MimeTypeMap.getFileExtensionFromUrl(it.toString())
+            MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())?.let { return it }
+        }
+        return if (uri != null) "application/octet-stream" else "text/plain"
     }
 
     fun listener(
@@ -215,31 +223,21 @@ internal object DragGo {
                     accepted
                 }
                 DragEvent.ACTION_DRAG_ENTERED -> {
-                    if (!isOverIsland(event.x, event.y, bounds())) {
-                        _selectedTarget.value = null
-                        _edgeScroll.value = 0
-                        false
-                    } else {
-                        prepareTargets(context, event)
-                        val origin = screenOrigin()
-                        val screenX = origin[0] + event.x
-                        selectAt(screenX, origin[1] + event.y)
-                        _edgeScroll.value = edgeDirection(screenX, context)
-                        true
-                    }
+                    // The touch window expands during the drag; do not reject events
+                    // based on host-local coordinates. Target selection uses screen bounds.
+                    prepareTargets(context, event)
+                    val origin = screenOrigin()
+                    val screenX = origin[0] + event.x
+                    selectAt(screenX, origin[1] + event.y)
+                    _edgeScroll.value = edgeDirection(screenX, context)
+                    true
                 }
                 DragEvent.ACTION_DRAG_LOCATION -> {
-                    if (!isOverIsland(event.x, event.y, bounds())) {
-                        _selectedTarget.value = null
-                        _edgeScroll.value = 0
-                        false
-                    } else {
-                        val origin = screenOrigin()
-                        val screenX = origin[0] + event.x
-                        selectAt(screenX, origin[1] + event.y)
-                        _edgeScroll.value = edgeDirection(screenX, context)
-                        true
-                    }
+                    val origin = screenOrigin()
+                    val screenX = origin[0] + event.x
+                    selectAt(screenX, origin[1] + event.y)
+                    _edgeScroll.value = edgeDirection(screenX, context)
+                    true
                 }
                 DragEvent.ACTION_DRAG_EXITED -> {
                     _edgeScroll.value = 0
