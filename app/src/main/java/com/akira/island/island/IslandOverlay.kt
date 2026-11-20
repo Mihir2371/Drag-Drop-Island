@@ -20,6 +20,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import com.akira.island.service.DragGo
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -1227,44 +1228,62 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val duplicatePackages = targets.groupingBy { it.activityInfo?.packageName.orEmpty() }.eachCount()
             targets.forEach { target ->
                 val key = DragGo.targetKey(target)
                 val selected = selectedTarget == key
                 val icon = remember(target) { target.loadIcon(context.packageManager) }
-                val label = remember(target) { target.loadLabel(context.packageManager).toString() }
-                AndroidView(
-                    factory = { ctx ->
-                        ImageView(ctx).apply {
-                            setImageDrawable(icon)
-                            contentDescription = label
-                            scaleType = ImageView.ScaleType.FIT_CENTER
-                        }
-                    },
-                    modifier = Modifier
-                        .size(46.dp)
-                        .graphicsLayer { val scale = if (selected) 1.08f else 1f; scaleX = scale; scaleY = scale }
-                        .clip(CircleShape)
-                        .background(if (selected) Color.White.copy(alpha = 0.26f) else Color.Transparent, CircleShape)
-                        .border(
-                            width = if (selected) 1.5.dp else 0.dp,
-                            color = if (selected) Color.White.copy(alpha = 0.95f) else Color.Transparent,
-                            shape = CircleShape,
-                        )
-                        .onGloballyPositioned { coordinates ->
-                            val bounds = coordinates.boundsInWindow()
-                            val origin = IntArray(2)
-                            pickerView.getLocationOnScreen(origin)
-                            DragGo.updateTargetBounds(
-                                key,
-                                Rect(
-                                    bounds.left + origin[0],
-                                    bounds.top + origin[1],
-                                    bounds.right + origin[0],
-                                    bounds.bottom + origin[1],
-                                ),
-                            )
+                val appLabel = remember(target) { target.loadLabel(context.packageManager).toString() }
+                val duplicate = (duplicatePackages[target.activityInfo?.packageName.orEmpty()] ?: 0) > 1
+                val actionLabel = remember(target, duplicate) {
+                    if (!duplicate) appLabel else target.activityInfo?.name?.substringAfterLast('.')?.replace(Regex("([a-z])([A-Z])"), "$1 $2")?.replace("Activity", "")?.replace("Handler", "")?.trim()?.ifBlank { appLabel } ?: appLabel
+                }
+                Column(
+                    modifier = Modifier.width(58.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            ImageView(ctx).apply {
+                                setImageDrawable(icon)
+                                contentDescription = actionLabel
+                                scaleType = ImageView.ScaleType.FIT_CENTER
+                            }
                         },
-                )
+                        modifier = Modifier
+                            .size(42.dp)
+                            .graphicsLayer { val scale = if (selected) 1.08f else 1f; scaleX = scale; scaleY = scale }
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (selected) Color.White.copy(alpha = 0.26f) else Color.Transparent, RoundedCornerShape(9.dp))
+                            .border(
+                                width = if (selected) 1.5.dp else 0.dp,
+                                color = if (selected) Color.White.copy(alpha = 0.95f) else Color.Transparent,
+                                shape = RoundedCornerShape(9.dp),
+                            )
+                            .onGloballyPositioned { coordinates ->
+                                val bounds = coordinates.boundsInWindow()
+                                val origin = IntArray(2)
+                                pickerView.getLocationOnScreen(origin)
+                                DragGo.updateTargetBounds(
+                                    key,
+                                    Rect(
+                                        bounds.left + origin[0],
+                                        bounds.top + origin[1],
+                                        bounds.right + origin[0],
+                                        bounds.bottom + origin[1],
+                                    ),
+                                )
+                            },
+                    )
+                    androidx.compose.material3.Text(
+                        actionLabel,
+                        maxLines = 1,
+                        fontSize = 9.sp,
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
         }
     }
