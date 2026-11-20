@@ -103,11 +103,11 @@ internal object DragGo {
         return launched
     }
 
-    private fun edgeDirection(x: Float, context: Context): Int {
+    private fun edgeDirection(screenX: Float, context: Context): Int {
         val rect = pickerBounds.value
         if (rect.isEmpty) return 0
         val edge = 36f * context.resources.displayMetrics.density
-        return when { x <= rect.left + edge -> -1; x >= rect.right - edge -> 1; else -> 0 }
+        return when { screenX <= rect.left + edge -> -1; screenX >= rect.right - edge -> 1; else -> 0 }
     }
 
     fun accepts(event: DragEvent): Boolean {
@@ -165,7 +165,7 @@ internal object DragGo {
                         val origin = screenOrigin()
                         val screenX = origin[0] + event.x
                         selectAt(screenX, origin[1] + event.y)
-                        _edgeScroll.value = edgeDirection(event.x, context)
+                        _edgeScroll.value = edgeDirection(screenX, context)
                         true
                     }
                 }
