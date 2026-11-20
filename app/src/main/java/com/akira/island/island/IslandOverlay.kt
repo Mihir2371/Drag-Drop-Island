@@ -396,7 +396,7 @@ fun IslandOverlay(
     // Explicitly hiding the empty capsule retains its previous non-interactive behavior.
     // A live drag is a transient system-owned session; inactivity timers must not
     // remove the destination surface while Android is delivering drag callbacks.
-    val hidden = !dragGoSession && (timedHidden || s.hideIdle && primary is Act.Idle && secondary == null && !showExpanded && !calibrating && !(s.evLock && keyguard))
+    val hidden = timedHidden || s.hideIdle && primary is Act.Idle && secondary == null && !showExpanded && !calibrating && !(s.evLock && keyguard)
     val wakeBounds = remember { mutableStateOf(Rect.Zero) }
 
     // Спрятанный остров не ловит касания, даже пока уходит
@@ -435,7 +435,7 @@ fun IslandOverlay(
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
             CompositionLocalProvider(LocalActivities provides acts.filterNot { it.transient }) {
-                IslandRow(slot, s, primary, showExpanded || dragGoMode, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, dragGoMode, onBody, onBubble, onBackdropShape, onBackdropSampler)
+                IslandRow(slot, s, primary, showExpanded || dragGoMode || dragGoSession, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, dragGoMode || dragGoSession, onBody, onBubble, onBackdropShape, onBackdropSampler)
             }
         }
         if (timedHidden) CameraWakeTarget(s, onBounds = { r ->
