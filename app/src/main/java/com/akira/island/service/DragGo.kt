@@ -35,6 +35,15 @@ internal object DragGo {
     private var pendingMimeTypes: List<String> = emptyList()
     private var preparedForCurrentDrag = false
     private var dragPermissions: DragAndDropPermissions? = null
+    private val _diagnostics = MutableStateFlow<List<String>>(emptyList())
+    val diagnostics = _diagnostics.asStateFlow()
+    private fun diag(message: String) { _diagnostics.value = (_diagnostics.value + message).takeLast(18) }
+    fun clearDiagnostics() { _diagnostics.value = emptyList() }
+    private fun beginDiagnostics(event: DragEvent) {
+        _diagnostics.value = emptyList()
+        diag("DRAG START")
+        diag("MIME: " + (event.clipDescription?.let { desc -> (0 until desc.mimeTypeCount).joinToString(", ") { desc.getMimeType(it) } } ?: "none"))
+    }
 
     private fun findActivity(context: Context): Activity? {
         var current = context
@@ -100,11 +109,14 @@ internal object DragGo {
             dir.listFiles()?.filter { it.isFile && it.lastModified() < System.currentTimeMillis() - 24L * 60L * 60L * 1000L }?.forEach { it.delete() }
             val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)?.takeIf { it.isNotBlank() } ?: "dat"
             val file = File(dir, "drop-${System.currentTimeMillis()}.$extension")
+            diag("READ: opening source")
             context.contentResolver.openInputStream(source)?.use { input ->
-                file.outputStream().use { output -> input.copyTo(output) }
-            } ?: return null
-            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        }.getOrNull()
+                file.outputStream().use { output -> val bytes = input.copyTo(output); diag("CACHE: OK ($bytes bytes)") }
+            } ?: run { diag("READ: openInputStream returned null"); return null }
+            val shared = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            diag("FILEPROVIDER: OK")
+            shared
+        }.onFailure { diag("COPY/URI ERROR: ${it.javaClass.simpleName}: ${it.message ?: "no detail"}") }.getOrNull()
     }
 
     private fun sendToTarget(context: Context, event: DragEvent): Boolean {
@@ -120,11 +132,15 @@ internal object DragGo {
             ?: item.intent?.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
             ?: item.intent?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
         val text = item.text?.toString()
+        diag("URI: " + if (uri != null) "found (${uri.scheme ?: "no scheme"})" else "missing")
+        diag("TEXT: " + if (!text.isNullOrBlank()) "found" else "missing")
         val mime = mimeFor(context, event, uri)
+        diag("TYPE: $mime")
         val isText = mime.startsWith("text/") || mime == "application/uri-list"
         if (uri == null && text.isNullOrBlank()) return false
         // Drag source grants may expire when the drag session ends; share an app-owned copy.
         val outgoingUri = if (!isText && uri != null) copyToShareCache(context, uri, mime) ?: run {
+            diag("TRANSFER: stopped at cache-copy stage")
             android.widget.Toast.makeText(context, "Couldn't read the dropped image.", android.widget.Toast.LENGTH_SHORT).show()
             dismiss()
             return false
@@ -149,10 +165,13 @@ internal object DragGo {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
             setClassName(activity.packageName, activity.name)
         }
+        diag("LAUNCH: attempting explicit recipient")
         val launchResult = runCatching { context.startActivity(send) }
         if (launchResult.isFailure) {
+            diag("LAUNCH: FAILED (${launchResult.exceptionOrNull()?.javaClass?.simpleName ?: "unknown"})")
             android.widget.Toast.makeText(context, "Couldn't open ${activity.packageName} for sharing. Try another destination.", android.widget.Toast.LENGTH_SHORT).show()
         } else {
+            diag("LAUNCH: SUCCESS (${activity.packageName})")
             android.widget.Toast.makeText(context, "Opening ${activity.packageName}…", android.widget.Toast.LENGTH_SHORT).show()
         }
         dismiss()
@@ -208,9 +227,14 @@ internal object DragGo {
                     // signal alive through Android's transient enter/exit callbacks.
                     dismiss()
                     val accepted = accepts(event)
+                    beginDiagnostics(event)
+                    diag("ACCEPTED: $accepted")
                     if (accepted && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                        dragPermissions = findActivity(hostView.context)?.requestDragAndDropPermissions(event)
-                    }
+                        val hostActivity = findActivity(hostView.context)
+                        diag("HOST ACTIVITY: " + if (hostActivity != null) "found" else "missing (overlay/service context)")
+                        dragPermissions = hostActivity?.requestDragAndDropPermissions(event)
+                        diag("DRAG PERMISSION: " + if (dragPermissions != null) "returned" else "null")
+                    } else diag("DRAG PERMISSION: not requested")
                     _sessionActive.value = accepted
                     accepted
                 }
@@ -247,6 +271,7 @@ internal object DragGo {
                     true
                 }
                 DragEvent.ACTION_DROP -> {
+                    diag("DROP: event received")
                     _edgeScroll.value = 0
                     val origin = screenOrigin()
                     selectAt(origin[0] + event.x, origin[1] + event.y)
