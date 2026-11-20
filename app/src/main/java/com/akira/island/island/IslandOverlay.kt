@@ -194,6 +194,8 @@ fun IslandOverlay(
     val dragGoTargets by DragGo.targets.collectAsState()
     val dragGoSession by DragGo.sessionActive.collectAsState()
     val dragGoMode = saved.dragGoEnabled && dragGoTargets.isNotEmpty()
+    // Drag & Go is a transient picker; collapse any expanded standby clock on entry so it cannot flash when the picker closes.
+    LaunchedEffect(dragGoSession) { if (dragGoSession) Controls.collapse() }
     val focus by IslandBus.focus.collectAsState()
     val calibrating by IslandBus.calibrating.collectAsState()
     val nextAlarm by IslandBus.nextAlarm.collectAsState()
