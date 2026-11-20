@@ -95,12 +95,20 @@ internal object DragGo {
             setType(mime)
             if (isText) {
                 putExtra(Intent.EXTRA_TEXT, text ?: uri?.toString())
-                if (uri != null) setDataAndType(uri, mime)
+                clipData = if (uri != null) {
+                    ClipData.newUri(context.contentResolver, "Drag & Go", uri)
+                } else {
+                    ClipData.newPlainText("Drag & Go", text)
+                }
             } else if (uri != null) {
                 putExtra(Intent.EXTRA_STREAM, uri)
-                setDataAndType(uri, mime)
-            } else putExtra(Intent.EXTRA_TEXT, text)
-            clipData = ClipData(clip)
+                // Keep the stream in ClipData too so destination apps receive read access
+                // through the standard Android sharing contract.
+                clipData = ClipData.newUri(context.contentResolver, "Drag & Go", uri)
+            } else {
+                putExtra(Intent.EXTRA_TEXT, text)
+                clipData = ClipData.newPlainText("Drag & Go", text)
+            }
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
             setClassName(activity.packageName, activity.name)
         }
