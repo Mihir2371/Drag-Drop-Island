@@ -119,6 +119,10 @@ internal object DragGo {
             ?: item.intent?.data
             ?: item.intent?.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
             ?: item.intent?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+            ?: item.text?.toString()?.lineSequence()
+                ?.map { it.trim() }
+                ?.firstOrNull { it.startsWith("content://") || it.startsWith("file://") }
+                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
         val text = item.text?.toString()
         val mime = mimeFor(context, event, uri)
         val isText = mime.startsWith("text/") || mime == "application/uri-list"
