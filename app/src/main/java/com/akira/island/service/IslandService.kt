@@ -418,10 +418,20 @@ class IslandService : AccessibilityService() {
         placeDisplayWindow(SettingsRepo.current, IslandBus.contentRotation.value)
         runCatching { wm?.addView(drawRoot, displayParams) }.onSuccess { display = drawRoot }
 
-        val touchRoot = TouchRoot(this, { display }, ::onOutsideTouch)
+        val touchRoot = TouchRoot(
+            this,
+            { display },
+            ::onOutsideTouch,
+            { rawX, rawY ->
+                val origin = IntArray(2)
+                display?.getLocationOnScreen(origin)
+                val local = androidx.compose.ui.geometry.Offset(rawX - origin[0], rawY - origin[1])
+                (!body.isEmpty && body.contains(local)) || (!bubble.isEmpty && bubble.contains(local))
+            },
+        )
         touchRoot.setOnDragListener(DragGo.listener(
             this,
-            { listOf(Rect(0f, 0f, touchRoot.width.toFloat(), touchRoot.height.toFloat())) },
+            { emptyList() },
             {
                 val origin = IntArray(2)
                 touchRoot.getLocationOnScreen(origin)
@@ -430,6 +440,9 @@ class IslandService : AccessibilityService() {
             { SettingsRepo.current.dragGoEnabled },
         ))
         runCatching { wm?.addView(touchRoot, touchParams) }.onSuccess { touch = touchRoot }
+        scope.launch {
+            DragGo.sessionActive.collect { active -> handler.post { updateTouchWindow(forceFullscreen = active) } }
+        }
         scope.launch {
             combine(SettingsRepo.state, IslandBus.expanded, IslandBus.screenOn, IslandBus.powerSave, IslandBus.locked) {
                     _, _, _, _, _ -> Unit
@@ -633,13 +646,14 @@ class IslandService : AccessibilityService() {
                 islandArea.bottom + dp(66),
             )
         } else islandArea
-        val usable = visible && !area.isEmpty
         val origin = IntArray(2)
         display?.getLocationOnScreen(origin)
-        val x = if (usable) origin[0] + floor(area.left).toInt() else -10
-        val y = if (usable) origin[1] + floor(area.top).toInt() else -10
-        val w = if (usable) ceil(area.width).toInt().coerceAtLeast(1) else 1
-        val h = if (usable) ceil(area.height).toInt().coerceAtLeast(1) else 1
+        val fullScreenDrag = DragGo.sessionActive.value
+        val usable = (visible && !area.isEmpty) || fullScreenDrag
+        val x = if (fullScreenDrag) 0 else if (usable) origin[0] + floor(area.left).toInt() else -10
+        val y = if (fullScreenDrag) 0 else if (usable) origin[1] + floor(area.top).toInt() else -10
+        val w = if (fullScreenDrag) resources.displayMetrics.widthPixels else if (usable) ceil(area.width).toInt().coerceAtLeast(1) else 1
+        val h = if (fullScreenDrag) resources.displayMetrics.heightPixels else if (usable) ceil(area.height).toInt().coerceAtLeast(1) else 1
         val flags = if (usable) touchParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
         else touchParams.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         if (touchParams.x == x && touchParams.y == y && touchParams.width == w && touchParams.height == h &&
@@ -940,6 +954,7 @@ class TouchRoot(
     context: Context,
     private val target: () -> View?,
     private val onOutside: () -> Unit,
+    private val isTouchOnIsland: (rawX: Float, rawY: Float) -> Boolean,
 ) : View(context) {
     private val origin = IntArray(2)
 
@@ -948,14 +963,17 @@ class TouchRoot(
             onOutside()
             return true
         }
+        // During drag the transparent window is full-screen for drop hit-testing.
+        // Let ordinary taps outside the visible island fall through to the app below.
+        if (DragGo.sessionActive.value && !isTouchOnIsland(ev.rawX, ev.rawY)) return false
         val view = target() ?: return false
         view.getLocationOnScreen(origin)
         val copy = MotionEvent.obtain(ev)
         // rawX - x — это левый верхний угол окна касаний на экране
         copy.offsetLocation(ev.rawX - ev.x - origin[0], ev.rawY - ev.y - origin[1])
-        view.dispatchTouchEvent(copy)
+        val handled = view.dispatchTouchEvent(copy)
         copy.recycle()
-        return true
+        return handled
     }
 }
 
