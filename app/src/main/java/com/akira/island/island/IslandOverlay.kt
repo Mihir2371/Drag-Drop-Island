@@ -1291,7 +1291,7 @@ private fun DragGoDebugPanel(enabled: Boolean) {
     var expanded by remember { mutableStateOf(false) }
     val entries by DragGo.diagnostics.collectAsState()
     Column(
-        modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp)
+        modifier = Modifier.fillMaxSize().wrapContentSize(Alignment.BottomEnd).padding(10.dp)
             .background(Color(0xEE17191D), RoundedCornerShape(14.dp))
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
