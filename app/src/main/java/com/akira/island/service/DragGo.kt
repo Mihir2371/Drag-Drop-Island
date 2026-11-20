@@ -82,7 +82,11 @@ internal object DragGo {
         val target = _targets.value.firstOrNull { targetKey(it) == selectedKey } ?: return false
         val activity = target.activityInfo ?: return false
         val item = clip.getItemAt(0)
+        // Some Android image drag sources expose the URI through an embedded Intent rather than Item.uri.
         val uri = item.uri
+            ?: item.intent?.data
+            ?: item.intent?.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+            ?: item.intent?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
         val text = item.text?.toString()
         val mime = mimeFor(context, event, uri)
         val isText = mime.startsWith("text/") || mime == "application/uri-list"
