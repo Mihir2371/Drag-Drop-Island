@@ -423,7 +423,6 @@ fun IslandOverlay(
     // Остров меряется по своему размеру, а не по окну, и стоит сверху по центру окна
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         DragGoIslandTargets(enabled = saved.dragGoEnabled, notch = s.notch, islandBounds = body.value)
-        DragGoDebugPanel(enabled = saved.dragGoEnabled)
         // Оплата: волны NFC и вспышка успеха вокруг острова, как в ролике
         if (!calibrating) PayEffects(primary, { body.value }, s)
         // Пасхалка: свечение за островом, вспышки и звёзды поверх
@@ -453,6 +452,8 @@ fun IslandOverlay(
         }
         com.akira.island.face.FaceUnlockLayer(s, allowed = !calibrating && !shadeOpen &&
             !showExpanded && !eggOn)
+        // Keep diagnostic controls above the island and effects so they receive taps.
+        DragGoDebugPanel(enabled = saved.dragGoEnabled)
     }
 }
 
