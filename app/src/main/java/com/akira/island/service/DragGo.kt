@@ -1,7 +1,9 @@
 package com.akira.island.service
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.ResolveInfo
 import android.net.Uri
@@ -30,6 +32,15 @@ internal object DragGo {
     private var pendingMimeTypes: List<String> = emptyList()
     private var preparedForCurrentDrag = false
     private var dragPermissions: DragAndDropPermissions? = null
+
+    private fun findActivity(context: Context): Activity? {
+        var current = context
+        while (current is ContextWrapper) {
+            if (current is Activity) return current
+            current = current.baseContext
+        }
+        return current as? Activity
+    }
 
     fun targetKey(info: ResolveInfo): String =
         info.activityInfo?.let { "${it.packageName}/${it.name}" }.orEmpty()
@@ -176,7 +187,7 @@ internal object DragGo {
                     dismiss()
                     val accepted = accepts(event)
                     if (accepted && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                        dragPermissions = hostView.requestDragAndDropPermissions(event)
+                        dragPermissions = findActivity(hostView.context)?.requestDragAndDropPermissions(event)
                     }
                     _sessionActive.value = accepted
                     accepted
