@@ -88,19 +88,24 @@ internal object DragGo {
         val isText = mime.startsWith("text/") || mime == "application/uri-list"
         if (uri == null && text.isNullOrBlank()) return false
         val send = Intent(Intent.ACTION_SEND).apply {
-            type = mime
-            if (isText) putExtra(Intent.EXTRA_TEXT, text ?: uri?.toString())
-            else if (uri != null) {
+            setType(mime)
+            if (isText) {
+                putExtra(Intent.EXTRA_TEXT, text ?: uri?.toString())
+                if (uri != null) setDataAndType(uri, mime)
+            } else if (uri != null) {
                 putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                setDataAndType(uri, mime)
             } else putExtra(Intent.EXTRA_TEXT, text)
             clipData = ClipData(clip)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
             setClassName(activity.packageName, activity.name)
         }
-        val launched = runCatching { context.startActivity(send) }.isSuccess
+        val launchResult = runCatching { context.startActivity(send) }
+        if (launchResult.isFailure) {
+            android.widget.Toast.makeText(context, "Couldn't send to this app. Try another destination.", android.widget.Toast.LENGTH_SHORT).show()
+        }
         dismiss()
-        return launched
+        return launchResult.isSuccess
     }
 
     private fun edgeDirection(screenX: Float, context: Context): Int {
@@ -178,7 +183,7 @@ internal object DragGo {
                         val origin = screenOrigin()
                         val screenX = origin[0] + event.x
                         selectAt(screenX, origin[1] + event.y)
-                        _edgeScroll.value = edgeDirection(event.x, context)
+                        _edgeScroll.value = edgeDirection(screenX, context)
                         true
                     }
                 }
