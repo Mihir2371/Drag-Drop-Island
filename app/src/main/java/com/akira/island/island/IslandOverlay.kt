@@ -423,6 +423,7 @@ fun IslandOverlay(
     // Остров меряется по своему размеру, а не по окну, и стоит сверху по центру окна
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         DragGoIslandTargets(enabled = saved.dragGoEnabled, notch = s.notch, islandBounds = body.value)
+        DragGoDebugPanel(enabled = saved.dragGoEnabled)
         // Оплата: волны NFC и вспышка успеха вокруг острова, как в ролике
         if (!calibrating) PayEffects(primary, { body.value }, s)
         // Пасхалка: свечение за островом, вспышки и звёзды поверх
@@ -1278,6 +1279,32 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                     )
                 }
             }
+        }
+    }
+}
+
+
+/** Temporary diagnostic UI for the isolated Drag Go troubleshooting branch. */
+@Composable
+private fun DragGoDebugPanel(enabled: Boolean) {
+    if (!enabled) return
+    var expanded by remember { mutableStateOf(false) }
+    val entries by DragGo.diagnostics.collectAsState()
+    Column(
+        modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp)
+            .background(Color(0xEE17191D), RoundedCornerShape(14.dp))
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text("Drag Go Debug  •  ${if (expanded) "Hide" else "Open"}", color = Color.White,
+            fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable { expanded = !expanded }.padding(4.dp))
+        if (expanded) {
+            Text("Drop an image or video to capture transfer stages.", color = Color.LightGray, fontSize = 10.sp)
+            if (entries.isEmpty()) Text("No test recorded yet", color = Color.LightGray, fontSize = 11.sp)
+            entries.forEach { line -> Text(line, color = Color.White, fontSize = 10.sp) }
+            Text("Clear log", color = Color(0xFFB7D9FF), fontSize = 11.sp,
+                modifier = Modifier.clickable { DragGo.clearDiagnostics() }.padding(4.dp))
         }
     }
 }
