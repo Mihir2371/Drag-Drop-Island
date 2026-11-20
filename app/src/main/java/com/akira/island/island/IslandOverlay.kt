@@ -435,7 +435,7 @@ fun IslandOverlay(
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
             CompositionLocalProvider(LocalActivities provides acts.filterNot { it.transient }) {
-                IslandRow(slot, s, primary, showExpanded || dragGoMode || dragGoSession, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, dragGoMode || dragGoSession, onBody, onBubble, onBackdropShape, onBackdropSampler)
+                IslandRow(slot, s, primary, showExpanded || dragGoMode, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, dragGoMode, onBody, onBubble, onBackdropShape, onBackdropSampler)
             }
         }
         if (timedHidden) CameraWakeTarget(s, onBounds = { r ->
