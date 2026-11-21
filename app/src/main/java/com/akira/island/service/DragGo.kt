@@ -1,18 +1,13 @@
 package com.akira.island.service
 
-import android.app.Activity
 import android.util.Log
 import android.content.ClipData
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.ResolveInfo
 import android.net.Uri
 import android.webkit.MimeTypeMap
-import androidx.core.content.FileProvider
-import java.io.File
 import android.view.DragEvent
-import android.view.DragAndDropPermissions
 import android.view.View
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,16 +33,6 @@ internal object DragGo {
     private val targetBounds = mutableMapOf<String, Rect>()
     private var pendingMimeTypes: List<String> = emptyList()
     private var preparedForCurrentDrag = false
-    private var dragPermissions: DragAndDropPermissions? = null
-
-    private fun findActivity(context: Context): Activity? {
-        var current = context
-        while (current is ContextWrapper) {
-            if (current is Activity) return current
-            current = current.baseContext
-        }
-        return current as? Activity
-    }
 
     fun targetKey(info: ResolveInfo): String =
         info.activityInfo?.let { "${it.packageName}/${it.name}" }.orEmpty()
@@ -62,8 +47,6 @@ internal object DragGo {
     }
 
     fun dismiss() {
-        dragPermissions?.release()
-        dragPermissions = null
         _sessionActive.value = false
         _edgeScroll.value = 0
         pendingMimeTypes = emptyList()
@@ -95,124 +78,6 @@ internal object DragGo {
         pickerBounds.value = Rect.Zero
         _selectedTarget.value = null
         _targets.value = compatible
-    }
-
-    private data class ShareCopy(val uri: Uri, val mime: String)
-
-    private fun sniffMime(file: File, fallback: String): String {
-        val head = ByteArray(16)
-        val count = file.inputStream().use { it.read(head) }
-        if (count >= 3 && head[0] == 0xFF.toByte() && head[1] == 0xD8.toByte() && head[2] == 0xFF.toByte()) return "image/jpeg"
-        if (count >= 8 && head.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))) return "image/png"
-        if (count >= 12 && head.copyOfRange(0, 4).contentEquals("RIFF".toByteArray()) && head.copyOfRange(8, 12).contentEquals("WEBP".toByteArray())) return "image/webp"
-        if (count >= 6 && (head.copyOfRange(0, 6).toString(Charsets.US_ASCII).startsWith("GIF8"))) return "image/gif"
-        if (count >= 5 && head.copyOfRange(0, 5).toString(Charsets.US_ASCII) == "%PDF-") return "application/pdf"
-        if (count >= 4 && head.copyOfRange(0, 4).contentEquals(byteArrayOf(0x50, 0x4B, 0x03, 0x04))) return "application/zip"
-        return fallback.takeIf { it != "application/octet-stream" && !it.contains("*") } ?: "application/octet-stream"
-    }
-
-    private fun copyToShareCache(context: Context, source: Uri, mime: String): ShareCopy? {
-        Log.d(TAG, "copyToShareCache start: ${uriSummary(source)}, mime=$mime")
-        return try {
-            val dir = File(context.cacheDir, "draggo").apply { mkdirs() }
-            dir.listFiles()?.filter { it.isFile && it.lastModified() < System.currentTimeMillis() - 24L * 60L * 60L * 1000L }?.forEach { it.delete() }
-            val temp = File(dir, "drop-${System.currentTimeMillis()}.tmp")
-            val input = context.contentResolver.openInputStream(source)
-            if (input == null) {
-                Log.e(TAG, "openInputStream returned null for ${uriSummary(source)}")
-                android.widget.Toast.makeText(context, "DragGo: image URI couldn't be opened (null stream)", android.widget.Toast.LENGTH_LONG).show()
-                return null
-            }
-            val copied = input.use { stream -> temp.outputStream().use { output -> stream.copyTo(output) } }
-            val finalMime = sniffMime(temp, mime)
-            val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(finalMime)?.takeIf { it.isNotBlank() } ?: "dat"
-            val file = File(dir, "drop-${System.currentTimeMillis()}.$extension")
-            if (!temp.renameTo(file)) {
-                temp.copyTo(file, overwrite = true)
-                temp.delete()
-            }
-            Log.d(TAG, "Copied $copied bytes; sniffed MIME=$finalMime; file=${file.name}")
-            android.widget.Toast.makeText(context, "DragGo: image read OK ($copied bytes, $finalMime)", android.widget.Toast.LENGTH_SHORT).show()
-            val outgoing = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            ShareCopy(outgoing, finalMime)
-        } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException reading dropped URI ${uriSummary(source)}; permission grant missing/expired?", e)
-            android.widget.Toast.makeText(context, "DragGo: permission denied reading image URI", android.widget.Toast.LENGTH_LONG).show()
-            null
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed copying dropped URI ${uriSummary(source)}", e)
-            android.widget.Toast.makeText(context, "DragGo: image read failed (${e.javaClass.simpleName})", android.widget.Toast.LENGTH_LONG).show()
-            null
-        }
-    }
-
-    private fun sendToTarget(context: Context, event: DragEvent): Boolean {
-        val clip = event.clipData ?: return false
-        if (clip.itemCount == 0) return false
-        val selectedKey = _selectedTarget.value ?: return false
-        val target = _targets.value.firstOrNull { targetKey(it) == selectedKey } ?: return false
-        val activity = target.activityInfo ?: return false
-        val item = clip.getItemAt(0)
-        // Some Android image drag sources expose the URI through an embedded Intent rather than Item.uri.
-        val uri = item.uri
-            ?: item.intent?.data
-            ?: item.intent?.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            ?: item.intent?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
-            ?: item.text?.toString()?.lineSequence()
-                ?.map { it.trim() }
-                ?.firstOrNull { it.startsWith("content://") || it.startsWith("file://") }
-                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
-        val text = item.text?.toString()
-        Log.d(TAG, "DROP payload: uri=${uriSummary(uri)}, hasText=${!text.isNullOrBlank()}, mimeTypes=${(0 until (event.clipDescription?.mimeTypeCount ?: 0)).map { event.clipDescription!!.getMimeType(it) }}")
-        val mime = mimeFor(context, event, uri)
-        val isText = mime.startsWith("text/") || mime == "application/uri-list"
-        if (uri == null && text.isNullOrBlank()) return false
-        // Drag source grants may expire when the drag session ends; share an app-owned copy.
-        val copied = if (!isText && uri != null) copyToShareCache(context, uri, mime) ?: run {
-            android.widget.Toast.makeText(context, "Couldn't read the dropped file.", android.widget.Toast.LENGTH_SHORT).show()
-            dismiss()
-            return false
-        } else null
-        val outgoingUri = copied?.uri ?: uri
-        val outgoingMime = copied?.mime ?: mime
-        val send = Intent(Intent.ACTION_SEND).apply {
-            setType(outgoingMime)
-            if (isText) {
-                putExtra(Intent.EXTRA_TEXT, text ?: uri?.toString())
-                clipData = if (uri != null) {
-                    ClipData.newUri(context.contentResolver, "Drag & Go", uri)
-                } else {
-                    ClipData.newPlainText("Drag & Go", text)
-                }
-            } else if (uri != null) {
-                putExtra(Intent.EXTRA_STREAM, outgoingUri)
-                // Send an app-owned cache URI with an explicit read grant.
-                clipData = ClipData.newUri(context.contentResolver, "Drag & Go", outgoingUri)
-            } else {
-                putExtra(Intent.EXTRA_TEXT, text)
-                clipData = ClipData.newPlainText("Drag & Go", text)
-            }
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            setClassName(activity.packageName, activity.name)
-        }
-        // Explicitly grant the selected receiver access to the app-owned URI.
-        if (outgoingUri != null && !isText) {
-            runCatching {
-                context.grantUriPermission(
-                    activity.packageName,
-                    outgoingUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            }.onFailure { Log.w(TAG, "Explicit URI grant failed for ${activity.packageName}", it) }
-        }
-        val launchResult = runCatching { context.startActivity(send) }
-        if (launchResult.isFailure) {
-            android.widget.Toast.makeText(context, "Couldn't open ${activity.packageName} for sharing. Try another destination.", android.widget.Toast.LENGTH_SHORT).show()
-        } else {
-            android.widget.Toast.makeText(context, "Opening ${activity.packageName}…", android.widget.Toast.LENGTH_SHORT).show()
-        }
-        dismiss()
-        return launchResult.isSuccess
     }
 
     private fun edgeDirection(screenX: Float, context: Context): Int {
@@ -280,14 +145,9 @@ internal object DragGo {
                     // signal alive through Android's transient enter/exit callbacks.
                     dismiss()
                     val accepted = accepts(event)
-                    if (accepted && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                        val activity = findActivity(hostView.context)
-                        Log.d(TAG, "drag permission request: activityContextFound=${activity != null}")
-                        dragPermissions = activity?.requestDragAndDropPermissions(event)
-                        Log.d(TAG, "drag permission object received=${dragPermissions != null}")
-                    } else {
-                        Log.d(TAG, "Drag rejected or API below N; accepted=$accepted")
-                    }
+                    // This is an Accessibility overlay, not an Activity. It cannot acquire
+                    // the Activity-bound drag URI permission here.
+                    Log.d(TAG, "Accessibility overlay received drag; Activity permission request unavailable")
                     _sessionActive.value = accepted
                     android.widget.Toast.makeText(context, if (accepted) "DragGo: drag started" else "DragGo: unsupported drag", android.widget.Toast.LENGTH_SHORT).show()
                     accepted
