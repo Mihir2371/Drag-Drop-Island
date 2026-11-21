@@ -80,6 +80,66 @@ internal object DragGo {
         _targets.value = compatible
     }
 
+    private fun sendToTarget(context: Context, event: DragEvent): Boolean {
+        val clip = event.clipData ?: return false
+        if (clip.itemCount == 0) return false
+        val selectedKey = _selectedTarget.value ?: return false
+        val target = _targets.value.firstOrNull { targetKey(it) == selectedKey } ?: return false
+        val activity = target.activityInfo ?: return false
+        val item = clip.getItemAt(0)
+        val uri = item.uri
+            ?: item.intent?.data
+            ?: item.intent?.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+            ?: item.intent?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+            ?: item.text?.toString()?.lineSequence()
+                ?.map { it.trim() }
+                ?.firstOrNull { it.startsWith("content://") || it.startsWith("file://") }
+                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        val text = item.text?.toString()
+        Log.d(TAG, "DROP payload: uri=${uriSummary(uri)}, hasText=${!text.isNullOrBlank()}, mimeTypes=${(0 until (event.clipDescription?.mimeTypeCount ?: 0)).map { event.clipDescription!!.getMimeType(it) }}")
+        val mime = mimeFor(context, event, uri)
+        val isText = mime.startsWith("text/") || mime == "application/uri-list"
+        if (uri == null && text.isNullOrBlank()) return false
+
+        // Accessibility overlays cannot request Activity drag URI permissions or cache-read
+        // arbitrary source content. Forward the original URI and its grant via ClipData.
+        val outgoingUri = uri
+        val outgoingMime = mime
+        if (!isText && outgoingUri != null) {
+            Log.d(TAG, "Forwarding original URI directly: ${uriSummary(outgoingUri)}, mime=$outgoingMime")
+            android.widget.Toast.makeText(context, "DragGo: forwarding original file URI", android.widget.Toast.LENGTH_SHORT).show()
+        }
+
+        val send = Intent(Intent.ACTION_SEND).apply {
+            setType(outgoingMime)
+            if (isText) {
+                putExtra(Intent.EXTRA_TEXT, text ?: uri?.toString())
+                clipData = if (uri != null) ClipData.newUri(context.contentResolver, "Drag & Go", uri)
+                    else ClipData.newPlainText("Drag & Go", text)
+            } else if (outgoingUri != null) {
+                putExtra(Intent.EXTRA_STREAM, outgoingUri)
+                clipData = ClipData.newUri(context.contentResolver, "Drag & Go", outgoingUri)
+            } else {
+                putExtra(Intent.EXTRA_TEXT, text)
+                clipData = ClipData.newPlainText("Drag & Go", text)
+            }
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            setClassName(activity.packageName, activity.name)
+        }
+        if (outgoingUri != null && !isText) {
+            runCatching { context.grantUriPermission(activity.packageName, outgoingUri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                .onFailure { Log.w(TAG, "Explicit URI grant failed for ${activity.packageName}", it) }
+        }
+        val launchResult = runCatching { context.startActivity(send) }
+        if (launchResult.isFailure) {
+            android.widget.Toast.makeText(context, "Couldn't open ${activity.packageName} for sharing. Try another destination.", android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            android.widget.Toast.makeText(context, "Opening ${activity.packageName}…", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        dismiss()
+        return launchResult.isSuccess
+    }
+
     private fun edgeDirection(screenX: Float, context: Context): Int {
         val rect = pickerBounds.value
         if (rect.isEmpty) return 0
@@ -145,9 +205,8 @@ internal object DragGo {
                     // signal alive through Android's transient enter/exit callbacks.
                     dismiss()
                     val accepted = accepts(event)
-                    // This is an Accessibility overlay, not an Activity. It cannot acquire
-                    // the Activity-bound drag URI permission here.
-                    Log.d(TAG, "Accessibility overlay received drag; Activity permission request unavailable")
+                    // Accessibility overlay is not an Activity; no Activity drag permission can be requested.
+                    Log.d(TAG, "Overlay drop receiver: Activity permission API unavailable")
                     _sessionActive.value = accepted
                     android.widget.Toast.makeText(context, if (accepted) "DragGo: drag started" else "DragGo: unsupported drag", android.widget.Toast.LENGTH_SHORT).show()
                     accepted
