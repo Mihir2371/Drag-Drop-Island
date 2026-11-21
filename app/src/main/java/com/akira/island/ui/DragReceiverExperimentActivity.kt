@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Bundle
 import android.view.DragEvent
 import android.view.Gravity
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -33,7 +34,7 @@ class DragReceiverExperimentActivity : Activity() {
         }
         root.addView(ScrollView(this).apply {
             isFillViewport = true
-            addView(status, ScrollView.LayoutParams(-1, -2))
+            addView(status, ViewGroup.LayoutParams(-1, -2))
         }, LinearLayout.LayoutParams(-1, 0, 1f))
         root.setOnDragListener { _, event -> handleDrag(event) }
         setContentView(root)
