@@ -147,6 +147,12 @@
         </activity>
 
         <activity
+            android:name=".ui.DragReceiverExperimentActivity"
+            android:exported="false"
+            android:label="Drag Receiver Experiment"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+
+        <activity
             android:name=".ui.SystemAlarmActivity"
             android:exported="false"
             android:excludeFromRecents="true"
