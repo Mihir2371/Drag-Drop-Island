@@ -1,6 +1,7 @@
 package com.akira.island.service
 
 import android.app.Activity
+import android.util.Log
 import android.content.ClipData
 import android.content.Context
 import android.content.ContextWrapper
@@ -19,6 +20,9 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** Dynamic Drag & Go destination discovery and island picker state. */
 internal object DragGo {
+    private const val TAG = "DragGo-Debug"
+
+    private fun uriSummary(uri: Uri?): String = uri?.let { "scheme=${it.scheme}, authority=${it.authority}" } ?: "null"
     private val _targets = MutableStateFlow<List<ResolveInfo>>(emptyList())
     val targets = _targets.asStateFlow()
     private val _selectedTarget = MutableStateFlow<String?>(null)
@@ -94,17 +98,32 @@ internal object DragGo {
     }
 
     private fun copyToShareCache(context: Context, source: Uri, mime: String): Uri? {
-        return runCatching {
+        Log.d(TAG, "copyToShareCache start: ${uriSummary(source)}, mime=$mime")
+        return try {
             val dir = File(context.cacheDir, "draggo").apply { mkdirs() }
             // Remove stale copies so temporary shared images don't accumulate indefinitely.
             dir.listFiles()?.filter { it.isFile && it.lastModified() < System.currentTimeMillis() - 24L * 60L * 60L * 1000L }?.forEach { it.delete() }
             val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)?.takeIf { it.isNotBlank() } ?: "dat"
             val file = File(dir, "drop-${System.currentTimeMillis()}.$extension")
-            context.contentResolver.openInputStream(source)?.use { input ->
-                file.outputStream().use { output -> input.copyTo(output) }
-            } ?: return null
-            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        }.getOrNull()
+            val input = context.contentResolver.openInputStream(source)
+            if (input == null) {
+                Log.e(TAG, "openInputStream returned null for ${uriSummary(source)}")
+                return null
+            }
+            val copied = input.use { stream ->
+                file.outputStream().use { output -> stream.copyTo(output) }
+            }
+            Log.d(TAG, "URI read succeeded; copied $copied bytes to cache file (exists=${file.exists()}, size=${file.length()})")
+            val outgoing = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            Log.d(TAG, "FileProvider URI created: ${uriSummary(outgoing)}")
+            outgoing
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException reading dropped URI ${uriSummary(source)}; permission grant missing/expired?", e)
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed copying dropped URI ${uriSummary(source)}", e)
+            null
+        }
     }
 
     private fun sendToTarget(context: Context, event: DragEvent): Boolean {
@@ -124,6 +143,7 @@ internal object DragGo {
                 ?.firstOrNull { it.startsWith("content://") || it.startsWith("file://") }
                 ?.let { runCatching { Uri.parse(it) }.getOrNull() }
         val text = item.text?.toString()
+        Log.d(TAG, "DROP payload: uri=${uriSummary(uri)}, hasText=${!text.isNullOrBlank()}, mimeTypes=${(0 until (event.clipDescription?.mimeTypeCount ?: 0)).map { event.clipDescription!!.getMimeType(it) }}")
         val mime = mimeFor(context, event, uri)
         val isText = mime.startsWith("text/") || mime == "application/uri-list"
         if (uri == null && text.isNullOrBlank()) return false
@@ -216,17 +236,24 @@ internal object DragGo {
             }
             when (event.action) {
                 DragEvent.ACTION_DRAG_STARTED -> {
+                    Log.d(TAG, "DRAG_STARTED: context=${hostView.context.javaClass.name}, payloadMimeTypes=${(0 until (event.clipDescription?.mimeTypeCount ?: 0)).map { event.clipDescription!!.getMimeType(it) }}")
                     // Start a fresh session only for supported payloads. Keep this
                     // signal alive through Android's transient enter/exit callbacks.
                     dismiss()
                     val accepted = accepts(event)
                     if (accepted && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                        dragPermissions = findActivity(hostView.context)?.requestDragAndDropPermissions(event)
+                        val activity = findActivity(hostView.context)
+                        Log.d(TAG, "drag permission request: activityContextFound=${activity != null}")
+                        dragPermissions = activity?.requestDragAndDropPermissions(event)
+                        Log.d(TAG, "drag permission object received=${dragPermissions != null}")
+                    } else {
+                        Log.d(TAG, "Drag rejected or API below N; accepted=$accepted")
                     }
                     _sessionActive.value = accepted
                     accepted
                 }
                 DragEvent.ACTION_DRAG_ENTERED -> {
+                    Log.d(TAG, "DRAG_ENTERED")
                     // The touch window expands during the drag; do not reject events
                     // based on host-local coordinates. Target selection uses screen bounds.
                     prepareTargets(context, event)
@@ -249,12 +276,14 @@ internal object DragGo {
                     true
                 }
                 DragEvent.ACTION_DROP -> {
+                    Log.d(TAG, "DROP received")
                     _edgeScroll.value = 0
                     val origin = screenOrigin()
                     selectAt(origin[0] + event.x, origin[1] + event.y)
                     sendToTarget(context, event)
                 }
                 DragEvent.ACTION_DRAG_ENDED -> {
+                    Log.d(TAG, "DRAG_ENDED")
                     // End session on every system completion path, including drops outside the island.
                     dismiss()
                     true
