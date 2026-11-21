@@ -5,13 +5,14 @@ import android.os.Bundle
 import android.view.DragEvent
 import android.view.Gravity
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
-/** Experimental Activity receiver for verifying cross-app URI permissions. */
+/** Experimental Activity receiver for diagnosing cross-app drag payloads and URI grants. */
 class DragReceiverExperimentActivity : Activity() {
     private lateinit var status: TextView
     private val io = Executors.newSingleThreadExecutor()
@@ -26,11 +27,14 @@ class DragReceiverExperimentActivity : Activity() {
         }
         status = TextView(this).apply {
             text = "Drag a file or image here.\n\nFor cross-app testing, use split-screen alongside the source app."
-            textSize = 18f
+            textSize = 16f
             setTextColor(0xFFFFFFFF.toInt())
-            gravity = Gravity.CENTER
+            gravity = Gravity.TOP
         }
-        root.addView(status, LinearLayout.LayoutParams(-1, -2))
+        root.addView(ScrollView(this).apply {
+            isFillViewport = true
+            addView(status, ScrollView.LayoutParams(-1, -2))
+        }, LinearLayout.LayoutParams(-1, 0, 1f))
         root.setOnDragListener { _, event -> handleDrag(event) }
         setContentView(root)
     }
@@ -44,39 +48,63 @@ class DragReceiverExperimentActivity : Activity() {
                     m.startsWith("image/") || m.startsWith("video/") ||
                         m.startsWith("audio/") || m.startsWith("application/") || m.startsWith("text/")
                 }
-                status.text = if (accepted) "Drag detected — drop the file here." else "Unsupported drag."
+                val mimes = (0 until desc.mimeTypeCount).joinToString(", ") { desc.getMimeType(it) }
+                status.text = "DRAG STARTED\nMIME types: $mimes\nAccepted: $accepted\n\nDrop the item here."
                 return accepted
             }
-            DragEvent.ACTION_DRAG_ENTERED -> { status.text = "Release to receive the file."; return true }
+            DragEvent.ACTION_DRAG_ENTERED -> { status.text = "Drag entered — release to inspect payload."; return true }
             DragEvent.ACTION_DRAG_LOCATION, DragEvent.ACTION_DRAG_EXITED -> return true
             DragEvent.ACTION_DROP -> {
-                val clip = event.clipData ?: return false
-                // Request permission synchronously while handling the actual drop.
-                val permissions = requestDragAndDropPermissions(event)
-                val item = clip.getItemAt(0)
-                val uri = item.uri ?: item.intent?.data
-                if (uri == null) {
-                    permissions?.release()
-                    status.text = "Drop received, but no content URI.\nText: ${item.text ?: "(none)"}"
+                val clip = event.clipData
+                if (clip == null) {
+                    status.text = "DROP RECEIVED\nClipData is NULL."
                     return true
                 }
-                status.text = "Drop received. Testing URI read permission…"
+
+                // Must request drag permissions synchronously while handling the actual drop.
+                val permissions = requestDragAndDropPermissions(event)
+                val desc = event.clipDescription
+                val mimes = desc?.let { d -> (0 until d.mimeTypeCount).joinToString(", ") { d.getMimeType(it) } } ?: "(no description)"
+                val itemDiagnostics = (0 until clip.itemCount).map { index ->
+                    val item = clip.getItemAt(index)
+                    val uri = item.uri ?: item.intent?.data
+                    buildString {
+                        append("Item $index:")
+                        append("\n  URI: ${item.uri ?: "(null)"}")
+                        append("\n  Intent data: ${item.intent?.data ?: "(null)"}")
+                        append("\n  Resolved URI: ${uri ?: "(null)"}")
+                        append("\n  Text: ${item.text ?: "(null)"}")
+                        append("\n  HTML: ${item.htmlText ?: "(null)"}")
+                    }
+                }
+                val firstUri = (0 until clip.itemCount).mapNotNull { index ->
+                    val item = clip.getItemAt(index)
+                    item.uri ?: item.intent?.data
+                }.firstOrNull()
+                val details = "DROP RECEIVED\nClip items: ${clip.itemCount}\nMIME types: $mimes\n\n${itemDiagnostics.joinToString("\n\n")}"
+                if (firstUri == null) {
+                    permissions?.release()
+                    status.text = "$details\n\nRESULT: NO URI FOUND IN ANY ITEM."
+                    return true
+                }
+
+                status.text = "$details\n\nURI found: $firstUri\nRESULT: Testing read access…"
                 io.execute {
                     val result = runCatching {
-                        val mime = contentResolver.getType(uri) ?: "application/octet-stream"
+                        val mime = contentResolver.getType(firstUri) ?: "(provider returned null MIME)"
                         val outFile = File(cacheDir, "dnd-received-${System.currentTimeMillis()}")
-                        contentResolver.openInputStream(uri)?.use { input ->
+                        contentResolver.openInputStream(firstUri)?.use { input ->
                             FileOutputStream(outFile).use { output -> input.copyTo(output) }
-                        } ?: error("Provider returned no stream")
-                        "${outFile.name}\nMIME: $mime\nBytes: ${outFile.length()}\nURI: $uri"
+                        } ?: error("ContentResolver.openInputStream returned null")
+                        "READ SUCCESS\nFile: ${outFile.name}\nMIME: $mime\nBytes copied: ${outFile.length()}\nURI: $firstUri"
                     }
                     permissions?.release()
                     runOnUiThread {
                         status.text = result.fold(
-                            { "SUCCESS: URI permission worked; copied into app cache.\n\n$it" },
-                            { "FAILED to read URI: ${it.javaClass.simpleName}: ${it.message}\n\nURI: $uri" }
+                            { "$details\n\nURI found: $firstUri\n\n$it" },
+                            { "$details\n\nURI found: $firstUri\n\nREAD FAILED\n${it.javaClass.simpleName}: ${it.message}" }
                         )
-                        Toast.makeText(this, if (result.isSuccess) "Receiver test: SUCCESS" else "Receiver test: FAILED", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, if (result.isSuccess) "Receiver test: READ SUCCESS" else "Receiver test: READ FAILED", Toast.LENGTH_LONG).show()
                     }
                 }
                 return true
