@@ -177,6 +177,16 @@ internal object DragGo {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
             setClassName(activity.packageName, activity.name)
         }
+        // Explicitly grant the selected receiver access to the app-owned URI.
+        if (outgoingUri != null && !isText) {
+            runCatching {
+                context.grantUriPermission(
+                    activity.packageName,
+                    outgoingUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }.onFailure { Log.w(TAG, "Explicit URI grant failed for ${activity.packageName}", it) }
+        }
         val launchResult = runCatching { context.startActivity(send) }
         if (launchResult.isFailure) {
             android.widget.Toast.makeText(context, "Couldn't open ${activity.packageName} for sharing. Try another destination.", android.widget.Toast.LENGTH_SHORT).show()
@@ -208,16 +218,23 @@ internal object DragGo {
         bounds.any { !it.isEmpty && it.contains(androidx.compose.ui.geometry.Offset(x, y)) }
 
     private fun mimeFor(context: Context, event: DragEvent, uri: Uri?): String {
-        // Prefer the provider's concrete MIME. URI-list is only a transport MIME,
-        // not the actual file type.
-        uri?.let { runCatching { context.contentResolver.getType(it) }.getOrNull()?.let { type ->
-            if (type != "text/uri-list" && type != "application/uri-list") return type
-        } }
+        // Prefer concrete MIME types. Wildcards such as image/* are useful for
+        // discovery, but some receivers require image/jpeg or image/png.
+        fun concrete(type: String): String? {
+            if (type == "text/uri-list" || type == "application/uri-list") return null
+            if (!type.contains("*")) return type
+            if (type.startsWith("image/") && uri != null) {
+                val extension = MimeTypeMap.getFileExtensionFromUrl(uri.toString())
+                MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
+                    ?.takeIf { it.startsWith("image/") && !it.contains("*") }?.let { return it }
+            }
+            return null
+        }
+        uri?.let { runCatching { context.contentResolver.getType(it) }.getOrNull()?.let(::concrete)?.let { return it } }
         val description = event.clipDescription
         if (description != null) {
             for (i in 0 until description.mimeTypeCount) {
-                val type = description.getMimeType(i)
-                if (type != "text/uri-list" && type != "application/uri-list") return type
+                concrete(description.getMimeType(i))?.let { return it }
             }
         }
         uri?.let {
