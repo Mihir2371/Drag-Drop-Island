@@ -108,20 +108,24 @@ internal object DragGo {
             val input = context.contentResolver.openInputStream(source)
             if (input == null) {
                 Log.e(TAG, "openInputStream returned null for ${uriSummary(source)}")
+                android.widget.Toast.makeText(context, "DragGo: image URI couldn't be opened (null stream)", android.widget.Toast.LENGTH_LONG).show()
                 return null
             }
             val copied = input.use { stream ->
                 file.outputStream().use { output -> stream.copyTo(output) }
             }
             Log.d(TAG, "URI read succeeded; copied $copied bytes to cache file (exists=${file.exists()}, size=${file.length()})")
+            android.widget.Toast.makeText(context, "DragGo: image read OK ($copied bytes)", android.widget.Toast.LENGTH_SHORT).show()
             val outgoing = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             Log.d(TAG, "FileProvider URI created: ${uriSummary(outgoing)}")
             outgoing
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException reading dropped URI ${uriSummary(source)}; permission grant missing/expired?", e)
+            android.widget.Toast.makeText(context, "DragGo: permission denied reading image URI", android.widget.Toast.LENGTH_LONG).show()
             null
         } catch (e: Exception) {
             Log.e(TAG, "Failed copying dropped URI ${uriSummary(source)}", e)
+            android.widget.Toast.makeText(context, "DragGo: image read failed (${e.javaClass.simpleName})", android.widget.Toast.LENGTH_LONG).show()
             null
         }
     }
@@ -250,6 +254,7 @@ internal object DragGo {
                         Log.d(TAG, "Drag rejected or API below N; accepted=$accepted")
                     }
                     _sessionActive.value = accepted
+                    android.widget.Toast.makeText(context, if (accepted) "DragGo: drag started" else "DragGo: unsupported drag", android.widget.Toast.LENGTH_SHORT).show()
                     accepted
                 }
                 DragEvent.ACTION_DRAG_ENTERED -> {
@@ -277,6 +282,7 @@ internal object DragGo {
                 }
                 DragEvent.ACTION_DROP -> {
                     Log.d(TAG, "DROP received")
+                    android.widget.Toast.makeText(context, "DragGo: drop received", android.widget.Toast.LENGTH_SHORT).show()
                     _edgeScroll.value = 0
                     val origin = screenOrigin()
                     selectAt(origin[0] + event.x, origin[1] + event.y)
