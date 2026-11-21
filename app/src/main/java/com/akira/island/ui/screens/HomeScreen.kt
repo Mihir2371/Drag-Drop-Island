@@ -189,6 +189,16 @@ fun HomeScreen(open: (Screen) -> Unit) {
                 color = Tile.Purple, onClick = { open(Screen.TESTS) },
             ) { Arrow() }
         }
+        // Experimental receiver: Activity can acquire drag URI permission at drop time.
+        Group {
+            GroupItem(
+                Pos.First, Icons.Rounded.Science,
+                tr("Drag receiver experiment", "Drag receiver experiment"),
+                tr("Test file drop permission in split-screen", "Test file drop permission in split-screen"),
+                color = Tile.Purple,
+                onClick = { context.startActivity(Intent(context, com.akira.island.ui.DragReceiverExperimentActivity::class.java)) },
+            ) { Arrow() }
+        }
     }
 }
 
