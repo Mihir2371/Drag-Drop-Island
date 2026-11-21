@@ -97,28 +97,44 @@ internal object DragGo {
         _targets.value = compatible
     }
 
-    private fun copyToShareCache(context: Context, source: Uri, mime: String): Uri? {
+    private data class ShareCopy(val uri: Uri, val mime: String)
+
+    private fun sniffMime(file: File, fallback: String): String {
+        val head = ByteArray(16)
+        val count = file.inputStream().use { it.read(head) }
+        if (count >= 3 && head[0] == 0xFF.toByte() && head[1] == 0xD8.toByte() && head[2] == 0xFF.toByte()) return "image/jpeg"
+        if (count >= 8 && head.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))) return "image/png"
+        if (count >= 12 && head.copyOfRange(0, 4).contentEquals("RIFF".toByteArray()) && head.copyOfRange(8, 12).contentEquals("WEBP".toByteArray())) return "image/webp"
+        if (count >= 6 && (head.copyOfRange(0, 6).toString(Charsets.US_ASCII).startsWith("GIF8"))) return "image/gif"
+        if (count >= 5 && head.copyOfRange(0, 5).toString(Charsets.US_ASCII) == "%PDF-") return "application/pdf"
+        if (count >= 4 && head.copyOfRange(0, 4).contentEquals(byteArrayOf(0x50, 0x4B, 0x03, 0x04))) return "application/zip"
+        return fallback.takeIf { it != "application/octet-stream" && !it.contains("*") } ?: "application/octet-stream"
+    }
+
+    private fun copyToShareCache(context: Context, source: Uri, mime: String): ShareCopy? {
         Log.d(TAG, "copyToShareCache start: ${uriSummary(source)}, mime=$mime")
         return try {
             val dir = File(context.cacheDir, "draggo").apply { mkdirs() }
-            // Remove stale copies so temporary shared images don't accumulate indefinitely.
             dir.listFiles()?.filter { it.isFile && it.lastModified() < System.currentTimeMillis() - 24L * 60L * 60L * 1000L }?.forEach { it.delete() }
-            val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)?.takeIf { it.isNotBlank() } ?: "dat"
-            val file = File(dir, "drop-${System.currentTimeMillis()}.$extension")
+            val temp = File(dir, "drop-${System.currentTimeMillis()}.tmp")
             val input = context.contentResolver.openInputStream(source)
             if (input == null) {
                 Log.e(TAG, "openInputStream returned null for ${uriSummary(source)}")
                 android.widget.Toast.makeText(context, "DragGo: image URI couldn't be opened (null stream)", android.widget.Toast.LENGTH_LONG).show()
                 return null
             }
-            val copied = input.use { stream ->
-                file.outputStream().use { output -> stream.copyTo(output) }
+            val copied = input.use { stream -> temp.outputStream().use { output -> stream.copyTo(output) } }
+            val finalMime = sniffMime(temp, mime)
+            val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(finalMime)?.takeIf { it.isNotBlank() } ?: "dat"
+            val file = File(dir, "drop-${System.currentTimeMillis()}.$extension")
+            if (!temp.renameTo(file)) {
+                temp.copyTo(file, overwrite = true)
+                temp.delete()
             }
-            Log.d(TAG, "URI read succeeded; copied $copied bytes to cache file (exists=${file.exists()}, size=${file.length()})")
-            android.widget.Toast.makeText(context, "DragGo: image read OK ($copied bytes)", android.widget.Toast.LENGTH_SHORT).show()
+            Log.d(TAG, "Copied $copied bytes; sniffed MIME=$finalMime; file=${file.name}")
+            android.widget.Toast.makeText(context, "DragGo: image read OK ($copied bytes, $finalMime)", android.widget.Toast.LENGTH_SHORT).show()
             val outgoing = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            Log.d(TAG, "FileProvider URI created: ${uriSummary(outgoing)}")
-            outgoing
+            ShareCopy(outgoing, finalMime)
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException reading dropped URI ${uriSummary(source)}; permission grant missing/expired?", e)
             android.widget.Toast.makeText(context, "DragGo: permission denied reading image URI", android.widget.Toast.LENGTH_LONG).show()
@@ -152,13 +168,15 @@ internal object DragGo {
         val isText = mime.startsWith("text/") || mime == "application/uri-list"
         if (uri == null && text.isNullOrBlank()) return false
         // Drag source grants may expire when the drag session ends; share an app-owned copy.
-        val outgoingUri = if (!isText && uri != null) copyToShareCache(context, uri, mime) ?: run {
-            android.widget.Toast.makeText(context, "Couldn't read the dropped image.", android.widget.Toast.LENGTH_SHORT).show()
+        val copied = if (!isText && uri != null) copyToShareCache(context, uri, mime) ?: run {
+            android.widget.Toast.makeText(context, "Couldn't read the dropped file.", android.widget.Toast.LENGTH_SHORT).show()
             dismiss()
             return false
-        } else uri
+        } else null
+        val outgoingUri = copied?.uri ?: uri
+        val outgoingMime = copied?.mime ?: mime
         val send = Intent(Intent.ACTION_SEND).apply {
-            setType(mime)
+            setType(outgoingMime)
             if (isText) {
                 putExtra(Intent.EXTRA_TEXT, text ?: uri?.toString())
                 clipData = if (uri != null) {
