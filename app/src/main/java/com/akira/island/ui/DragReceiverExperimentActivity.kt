@@ -1,6 +1,9 @@
 package com.akira.island.ui
 
 import android.app.Activity
+import androidx.core.content.FileProvider
+import android.content.Intent
+import android.content.ClipData
 import android.os.Bundle
 import android.view.DragEvent
 import android.view.Gravity
@@ -93,7 +96,8 @@ class DragReceiverExperimentActivity : Activity() {
                 io.execute {
                     val result = runCatching {
                         val mime = contentResolver.getType(firstUri) ?: "(provider returned null MIME)"
-                        val outFile = File(cacheDir, "dnd-received-${System.currentTimeMillis()}")
+                        val receivedDir = File(cacheDir, "draggo/received").apply { mkdirs() }
+                        val outFile = File(receivedDir, "dnd-received-${System.currentTimeMillis()}")
                         contentResolver.openInputStream(firstUri)?.use { input ->
                             FileOutputStream(outFile).use { output -> input.copyTo(output) }
                         } ?: error("ContentResolver.openInputStream returned null")
@@ -105,7 +109,8 @@ class DragReceiverExperimentActivity : Activity() {
                             { "$details\n\nURI found: $firstUri\n\n$it" },
                             { "$details\n\nURI found: $firstUri\n\nREAD FAILED\n${it.javaClass.simpleName}: ${it.message}" }
                         )
-                        Toast.makeText(this, if (result.isSuccess) "Receiver test: READ SUCCESS" else "Receiver test: READ FAILED", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, if (result.isSuccess) "Read succeeded" else "Receiver test: READ FAILED", Toast.LENGTH_LONG).show()
+                        result.getOrNull()?.let { openShareSheet(outFile, contentResolver.getType(firstUri) ?: "application/octet-stream") }
                     }
                 }
                 return true
@@ -113,6 +118,17 @@ class DragReceiverExperimentActivity : Activity() {
             DragEvent.ACTION_DRAG_ENDED -> return true
         }
         return false
+    }
+
+    private fun openShareSheet(file: File, mime: String) {
+        val uri = FileProvider.getUriForFile(this, "\${packageName}.fileprovider", file)
+        val share = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newUri(contentResolver, file.name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(share, "Share dropped item"))
     }
 
     override fun onDestroy() {
