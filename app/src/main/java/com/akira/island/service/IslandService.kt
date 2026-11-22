@@ -19,6 +19,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.TypedValue
+import android.util.Log
 import android.view.Display
 import android.view.Gravity
 import android.view.KeyEvent
