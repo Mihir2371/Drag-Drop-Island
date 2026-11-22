@@ -97,32 +97,12 @@ class DragReceiverExperimentActivity : Activity() {
                     val result = runCatching {
                         val mime = contentResolver.getType(firstUri) ?: "application/octet-stream"
                         val receivedDir = File(cacheDir, "draggo/received").apply { mkdirs() }
-                        val outFile = File(receivedDir, "dnd-received-\${System.currentTimeMillis()}")
+                        val outFile = File(receivedDir, "dnd-received-${System.currentTimeMillis()}")
                         contentResolver.openInputStream(firstUri)?.use { input ->
                             FileOutputStream(outFile).use { output -> input.copyTo(output) }
                         } ?: error("ContentResolver.openInputStream returned null")
                         outFile to mime
                     }
-                    permissions?.release()
-                    runOnUiThread {
-                        status.text = result.fold(
-                            { (file, mime) -> "\${details}\\n\\nURI found: $firstUri\\n\\nREAD SUCCESS\\nFile: \${file.name}\\nMIME: $mime\\nBytes copied: \${file.length()}\\n\\nOpening share sheet…" },
-                            { error -> "\${details}\\n\\nURI found: $firstUri\\n\\nREAD FAILED\\n\${error.javaClass.simpleName}: \${error.message}" }
-                        )
-                        Toast.makeText(this, if (result.isSuccess) "Read succeeded — sharing" else "Receiver test: READ FAILED", Toast.LENGTH_LONG).show()
-                        result.getOrNull()?.let { (file, mime) -> openShareSheet(file, mime) }
-                    }
-                }
-                    permissions?.release()
-                    runOnUiThread {
-                        status.text = result.fold(
-                            { "$details\n\nURI found: $firstUri\n\n$it" },
-                            { "$details\n\nURI found: $firstUri\n\nREAD FAILED\n${it.javaClass.simpleName}: ${it.message}" }
-                        )
-                        Toast.makeText(this, if (result.isSuccess) "Read succeeded" else "Receiver test: READ FAILED", Toast.LENGTH_LONG).show()
-                        result.getOrNull()?.let { openShareSheet(outFile, contentResolver.getType(firstUri) ?: "application/octet-stream") }
-                    }
-                }
                 return true
             }
             DragEvent.ACTION_DRAG_ENDED -> return true
