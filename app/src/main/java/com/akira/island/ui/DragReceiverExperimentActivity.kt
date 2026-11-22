@@ -1,12 +1,12 @@
 package com.akira.island.ui
 
 import android.app.Activity
-import android.content.ClipData
 import android.content.Intent
 import android.os.Bundle
 import android.view.DragEvent
 import android.view.Gravity
-import android.view.ViewGroup
+import android.view.View
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -16,28 +16,46 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
-/** Persistent transparent Activity drop receiver under the accessibility island. */
+/** A transparent, island-sized floating Activity that is a drag target only over the island. */
 class DragReceiverExperimentActivity : Activity() {
     private lateinit var status: TextView
     private val io = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Disabled until a drag-only receiver can avoid intercepting normal touch input.
-        finish()
-        return
         window.setBackgroundDrawableResource(android.R.color.transparent)
-        // This Activity stays present as a drag target while allowing all normal
-        // taps/gestures to pass through to the app beneath it.
-        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-            android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        applyBounds(intent)
         val root = FrameLayout(this).apply {
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
             setOnDragListener { _, event -> handleDrag(event) }
         }
-        setContentView(root, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-        ))
+        status = TextView(this).apply {
+            visibility = View.GONE
+        }
+        root.addView(status, FrameLayout.LayoutParams(1, 1))
+        setContentView(root)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyBounds(intent)
+    }
+
+    private fun applyBounds(intent: Intent) {
+        if (!intent.getBooleanExtra(EXTRA_ACTIVE, false)) {
+            finish()
+            return
+        }
+        val w = intent.getIntExtra(EXTRA_WIDTH, 1).coerceAtLeast(1)
+        val h = intent.getIntExtra(EXTRA_HEIGHT, 1).coerceAtLeast(1)
+        val lp = window.attributes
+        lp.width = w
+        lp.height = h
+        lp.gravity = Gravity.TOP or Gravity.START
+        lp.x = intent.getIntExtra(EXTRA_X, 0)
+        lp.y = intent.getIntExtra(EXTRA_Y, 0)
+        window.attributes = lp
     }
 
     private fun handleDrag(event: DragEvent): Boolean {
@@ -49,22 +67,18 @@ class DragReceiverExperimentActivity : Activity() {
                     mime.startsWith("image/") || mime.startsWith("video/") ||
                         mime.startsWith("audio/") || mime.startsWith("application/") || mime.startsWith("text/")
                 }
-                status.text = if (accepted) "Drop one item here" else "Unsupported drag"
                 return accepted
             }
-            DragEvent.ACTION_DRAG_ENTERED -> { status.text = "Release to receive"; return true }
-            DragEvent.ACTION_DRAG_LOCATION, DragEvent.ACTION_DRAG_EXITED -> return true
+            DragEvent.ACTION_DRAG_ENTERED, DragEvent.ACTION_DRAG_LOCATION, DragEvent.ACTION_DRAG_EXITED -> return true
             DragEvent.ACTION_DROP -> {
-                val clip = event.clipData
-                if (clip == null) { showStatus("Drop contained no ClipData"); return true }
-                // Activity-only URI grant API must be called synchronously during ACTION_DROP.
+                val clip = event.clipData ?: run { showStatus("Drop contained no ClipData"); return true }
+                // Android's URI grant must be requested synchronously during ACTION_DROP.
                 val permissions = requestDragAndDropPermissions(event)
                 val mimeList = event.clipDescription?.let { d ->
                     (0 until d.mimeTypeCount).map { d.getMimeType(it) }
                 }.orEmpty()
                 if (clip.itemCount != 1) {
                     permissions?.release()
-                    showStatus("Only one item per drop is supported")
                     Toast.makeText(this, "Drag & Go accepts a single item", Toast.LENGTH_SHORT).show()
                     return true
                 }
@@ -77,7 +91,6 @@ class DragReceiverExperimentActivity : Activity() {
                     return true
                 }
                 val mime = contentResolver.getType(uri) ?: mimeList.firstOrNull() ?: "application/octet-stream"
-                showStatus("Reading dropped item…")
                 io.execute {
                     val result = runCatching {
                         val dir = File(cacheDir, "draggo/received").apply { mkdirs() }
@@ -91,14 +104,10 @@ class DragReceiverExperimentActivity : Activity() {
                     runOnUiThread {
                         result.fold(
                             { (file, type) ->
-                                showStatus("Received ${file.length()} bytes")
-                                Toast.makeText(this, "Drop copied — opening share sheet", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this, "Drop copied — opening island picker", Toast.LENGTH_LONG).show()
                                 launchShare(file, type)
                             },
-                            { err ->
-                                showStatus("Read failed: ${err.message ?: err.javaClass.simpleName}")
-                                Toast.makeText(this, "Couldn't read dropped item", Toast.LENGTH_LONG).show()
-                            }
+                            { Toast.makeText(this, "Couldn't read dropped item", Toast.LENGTH_LONG).show() }
                         )
                     }
                 }
@@ -109,13 +118,12 @@ class DragReceiverExperimentActivity : Activity() {
         return false
     }
 
-    private fun showStatus(message: String) { status.text = message }
+    private fun showStatus(message: String) {
+        status.text = message
+    }
 
     private fun launchShare(file: File, mime: String) {
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        // Hand off the cached file to the island's own target picker instead of
-        // launching a standalone chooser. The Activity can now close; picker state
-        // is held in DragGo and rendered by the accessibility overlay.
         DragGo.activateReceivedFile(this, uri, mime)
         finish()
     }
@@ -123,5 +131,13 @@ class DragReceiverExperimentActivity : Activity() {
     override fun onDestroy() {
         io.shutdown()
         super.onDestroy()
+    }
+
+    companion object {
+        const val EXTRA_ACTIVE = "drag_receiver_active"
+        const val EXTRA_X = "drag_receiver_x"
+        const val EXTRA_Y = "drag_receiver_y"
+        const val EXTRA_WIDTH = "drag_receiver_width"
+        const val EXTRA_HEIGHT = "drag_receiver_height"
     }
 }
