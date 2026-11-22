@@ -9,8 +9,6 @@ import android.net.Uri
 import android.webkit.MimeTypeMap
 import android.view.DragEvent
 import android.view.View
-import java.io.File
-import java.io.FileOutputStream
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -103,30 +101,13 @@ internal object DragGo {
         val isText = mime.startsWith("text/") || mime == "application/uri-list"
         if (uri == null && text.isNullOrBlank()) return false
 
-        // Try to snapshot the dropped content inside the overlay service while the drag URI is fresh.
-        // Unlike an Activity, this accessibility overlay cannot call requestDragAndDropPermissions().
-        // If direct reading is denied, keep the original-URI forwarding fallback.
-        var outgoingUri = uri
-        var outgoingMime = mime
-        var cachedFile: File? = null
-        if (!isText && uri != null) {
-            val copied = runCatching {
-                val dir = File(context.cacheDir, "draggo/received").apply { mkdirs() }
-                val file = File(dir, "island-drop-${System.currentTimeMillis()}")
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(file).use { output -> input.copyTo(output) }
-                } ?: error("ContentResolver.openInputStream returned null")
-                file
-            }
-            copied.onSuccess { file ->
-                cachedFile = file
-                outgoingUri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                Log.d(TAG, "Overlay copy success: ${file.name}, bytes=${file.length()}")
-                android.widget.Toast.makeText(context, "Island: file copied (${file.length()} bytes)", android.widget.Toast.LENGTH_SHORT).show()
-            }.onFailure { error ->
-                Log.w(TAG, "Overlay copy failed; forwarding original URI", error)
-                android.widget.Toast.makeText(context, "Island: copy denied; trying original URI", android.widget.Toast.LENGTH_SHORT).show()
-            }
+        // Accessibility overlays cannot request Activity drag URI permissions or cache-read
+        // arbitrary source content. Forward the original URI and its grant via ClipData.
+        val outgoingUri = uri
+        val outgoingMime = mime
+        if (!isText && outgoingUri != null) {
+            Log.d(TAG, "Forwarding original URI directly: ${uriSummary(outgoingUri)}, mime=$outgoingMime")
+            android.widget.Toast.makeText(context, "DragGo: forwarding original file URI", android.widget.Toast.LENGTH_SHORT).show()
         }
 
         val send = Intent(Intent.ACTION_SEND).apply {
