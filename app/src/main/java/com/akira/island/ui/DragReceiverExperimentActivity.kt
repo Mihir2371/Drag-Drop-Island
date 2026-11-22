@@ -23,6 +23,9 @@ class DragReceiverExperimentActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Disabled until a drag-only receiver can avoid intercepting normal touch input.
+        finish()
+        return
         window.setBackgroundDrawableResource(android.R.color.transparent)
         // This Activity stays present as a drag target while allowing all normal
         // taps/gestures to pass through to the app beneath it.
