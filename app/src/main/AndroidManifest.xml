@@ -146,12 +146,13 @@
             </intent-filter>
         </activity>
 
-        <!-- Translucent receiver prototype; start it before the source app's drag for split-screen testing. -->
+        <!-- Persistent transparent, non-touchable drag receiver behind the island. -->
         <activity
             android:name=".ui.DragReceiverExperimentActivity"
             android:exported="false"
-            android:label="Drag Receiver Experiment"
+            android:label="Drag Receiver"
             android:excludeFromRecents="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.DragReceiverTransparent" />
 
         <activity
