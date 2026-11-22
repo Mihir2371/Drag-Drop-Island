@@ -16,7 +16,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
-/** Transparent Activity drop receiver prototype; launch before the drag for split-screen testing. */
+/** Persistent transparent Activity drop receiver under the accessibility island. */
 class DragReceiverExperimentActivity : Activity() {
     private lateinit var status: TextView
     private val io = Executors.newSingleThreadExecutor()
@@ -24,21 +24,17 @@ class DragReceiverExperimentActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setBackgroundDrawableResource(android.R.color.transparent)
-        val root = FrameLayout(this).apply { setBackgroundColor(android.graphics.Color.TRANSPARENT) }
-        status = TextView(this).apply {
-            text = "Drag & Go receiver\nDrop one file or image"
-            textSize = 14f
-            setTextColor(0xFFFFFFFF.toInt())
-            gravity = Gravity.CENTER
-            setPadding(18, 12, 18, 12)
-            setBackgroundColor(0xCC202228.toInt())
+        // This Activity stays present as a drag target while allowing all normal
+        // taps/gestures to pass through to the app beneath it.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+            android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setOnDragListener { _, event -> handleDrag(event) }
         }
-        root.addView(status, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        ).apply { topMargin = 48 })
-        root.setOnDragListener { _, event -> handleDrag(event) }
-        setContentView(root)
+        setContentView(root, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ))
     }
 
     private fun handleDrag(event: DragEvent): Boolean {
