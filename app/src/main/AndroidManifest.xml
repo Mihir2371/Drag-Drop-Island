@@ -39,7 +39,7 @@
     <!-- Кнопки «Режим звука» и «Не беспокоить» в раскрытом острове -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
-    <!-- Обновление из приложения: скачанный APK открывает системная установка -->
+    <!-- Обновление из приложения: скачанный APK открывает системную установку -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Иконки и запуск приложений, которые показывают музыку и прогресс -->
@@ -146,11 +146,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Translucent receiver prototype; start it before the source app's drag for split-screen testing. -->
         <activity
             android:name=".ui.DragReceiverExperimentActivity"
             android:exported="false"
             android:label="Drag Receiver Experiment"
-            android:theme="@android:style/Theme.Material.NoActionBar" />
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.DragReceiverTransparent" />
 
         <activity
             android:name=".ui.SystemAlarmActivity"
