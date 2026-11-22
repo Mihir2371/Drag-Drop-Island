@@ -95,14 +95,24 @@ class DragReceiverExperimentActivity : Activity() {
                 status.text = "$details\n\nURI found: $firstUri\nRESULT: Testing read access…"
                 io.execute {
                     val result = runCatching {
-                        val mime = contentResolver.getType(firstUri) ?: "(provider returned null MIME)"
+                        val mime = contentResolver.getType(firstUri) ?: "application/octet-stream"
                         val receivedDir = File(cacheDir, "draggo/received").apply { mkdirs() }
-                        val outFile = File(receivedDir, "dnd-received-${System.currentTimeMillis()}")
+                        val outFile = File(receivedDir, "dnd-received-\${System.currentTimeMillis()}")
                         contentResolver.openInputStream(firstUri)?.use { input ->
                             FileOutputStream(outFile).use { output -> input.copyTo(output) }
                         } ?: error("ContentResolver.openInputStream returned null")
-                        "READ SUCCESS\nFile: ${outFile.name}\nMIME: $mime\nBytes copied: ${outFile.length()}\nURI: $firstUri"
+                        outFile to mime
                     }
+                    permissions?.release()
+                    runOnUiThread {
+                        status.text = result.fold(
+                            { (file, mime) -> "\${details}\\n\\nURI found: $firstUri\\n\\nREAD SUCCESS\\nFile: \${file.name}\\nMIME: $mime\\nBytes copied: \${file.length()}\\n\\nOpening share sheet…" },
+                            { error -> "\${details}\\n\\nURI found: $firstUri\\n\\nREAD FAILED\\n\${error.javaClass.simpleName}: \${error.message}" }
+                        )
+                        Toast.makeText(this, if (result.isSuccess) "Read succeeded — sharing" else "Receiver test: READ FAILED", Toast.LENGTH_LONG).show()
+                        result.getOrNull()?.let { (file, mime) -> openShareSheet(file, mime) }
+                    }
+                }
                     permissions?.release()
                     runOnUiThread {
                         status.text = result.fold(
@@ -121,7 +131,7 @@ class DragReceiverExperimentActivity : Activity() {
     }
 
     private fun openShareSheet(file: File, mime: String) {
-        val uri = FileProvider.getUriForFile(this, "\${packageName}.fileprovider", file)
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         val share = Intent(Intent.ACTION_SEND).apply {
             type = mime
             putExtra(Intent.EXTRA_STREAM, uri)
