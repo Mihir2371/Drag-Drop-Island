@@ -220,12 +220,7 @@ class IslandService : AccessibilityService() {
         runCatching { displays?.registerDisplayListener(displayListener, handler) }
 
         createWindows()
-        // Keep a transparent Activity drop receiver alive underneath the accessibility island.
-        runCatching {
-            startActivity(Intent(this, com.akira.island.ui.DragReceiverExperimentActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            })
-        }.onFailure { Log.w("DragGo-Receiver", "Could not start persistent drop receiver", it) }
+        // Full-screen Activity receiver disabled: it was intercepting home-screen interaction.
         KeepAliveService.sync(this)
         IslandTile.refresh(this)
         events = SystemEvents(this).also { runCatching { it.start() } }
