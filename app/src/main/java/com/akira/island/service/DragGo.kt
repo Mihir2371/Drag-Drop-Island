@@ -33,6 +33,54 @@ internal object DragGo {
     private val targetBounds = mutableMapOf<String, Rect>()
     private var pendingMimeTypes: List<String> = emptyList()
     private var preparedForCurrentDrag = false
+    private var cachedDropUri: Uri? = null
+    private var cachedDropMime: String? = null
+
+    /** Activate the island's destination picker for a file received by the Activity. */
+    fun activateReceivedFile(context: Context, uri: Uri, mime: String) {
+        dismiss()
+        cachedDropUri = uri
+        cachedDropMime = mime
+        val compatible = context.packageManager.queryIntentActivities(
+            Intent(Intent.ACTION_SEND).setType(mime), 0
+        ).filter { it.activityInfo?.packageName != context.packageName }
+            .distinctBy { targetKey(it) }
+            .sortedBy { it.loadLabel(context.packageManager).toString().lowercase() }
+        _targets.value = compatible
+        _sessionActive.value = compatible.isNotEmpty()
+        if (compatible.isEmpty()) {
+            cachedDropUri = null
+            cachedDropMime = null
+            android.widget.Toast.makeText(context, "No compatible sharing targets found", android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            android.widget.Toast.makeText(context, "Choose a target on the island", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Tap a picker target to share the Activity-received, app-owned cached file. */
+    fun sendReceivedFile(context: Context, key: String): Boolean {
+        val uri = cachedDropUri ?: return false
+        val mime = cachedDropMime ?: return false
+        val target = _targets.value.firstOrNull { targetKey(it) == key }?.activityInfo ?: return false
+        val send = Intent(Intent.ACTION_SEND).apply {
+            setType(mime)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newUri(context.contentResolver, "Drag & Go received file", uri)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            setClassName(target.packageName, target.name)
+        }
+        runCatching {
+            context.grantUriPermission(target.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            context.startActivity(send)
+        }.onFailure {
+            android.widget.Toast.makeText(context, "Couldn't open ${target.packageName}", android.widget.Toast.LENGTH_SHORT).show()
+            return false
+        }
+        dismiss()
+        cachedDropUri = null
+        cachedDropMime = null
+        return true
+    }
 
     fun targetKey(info: ResolveInfo): String =
         info.activityInfo?.let { "${it.packageName}/${it.name}" }.orEmpty()
