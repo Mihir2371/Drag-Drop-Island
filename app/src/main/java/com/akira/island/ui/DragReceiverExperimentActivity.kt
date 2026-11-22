@@ -7,8 +7,7 @@ import android.os.Bundle
 import android.view.DragEvent
 import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.ScrollView
+import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -16,29 +15,27 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
-/** Activity drop receiver: obtains temporary drag URI permission, copies to app cache, then shares the copy. */
+/** Transparent Activity drop receiver prototype; launch before the drag for split-screen testing. */
 class DragReceiverExperimentActivity : Activity() {
     private lateinit var status: TextView
     private val io = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(40, 48, 40, 48)
-            setBackgroundColor(0xFF15171B.toInt())
-        }
+        window.setBackgroundDrawableResource(android.R.color.transparent)
+        val root = FrameLayout(this).apply { setBackgroundColor(android.graphics.Color.TRANSPARENT) }
         status = TextView(this).apply {
-            text = "Drag a file or image here.\n\nFor cross-app testing, use split-screen alongside the source app."
-            textSize = 16f
+            text = "Drag & Go receiver\nDrop one file or image"
+            textSize = 14f
             setTextColor(0xFFFFFFFF.toInt())
-            gravity = Gravity.TOP
+            gravity = Gravity.CENTER
+            setPadding(18, 12, 18, 12)
+            setBackgroundColor(0xCC202228.toInt())
         }
-        root.addView(ScrollView(this).apply {
-            isFillViewport = true
-            addView(status, ViewGroup.LayoutParams(-1, -2))
-        }, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(status, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        ).apply { topMargin = 48 })
         root.setOnDragListener { _, event -> handleDrag(event) }
         setContentView(root)
     }
@@ -52,68 +49,57 @@ class DragReceiverExperimentActivity : Activity() {
                     mime.startsWith("image/") || mime.startsWith("video/") ||
                         mime.startsWith("audio/") || mime.startsWith("application/") || mime.startsWith("text/")
                 }
-                val mimes = (0 until desc.mimeTypeCount).joinToString(", ") { desc.getMimeType(it) }
-                status.text = "DRAG STARTED\nMIME types: $mimes\nAccepted: $accepted\n\nDrop the item here."
+                status.text = if (accepted) "Drop one item here" else "Unsupported drag"
                 return accepted
             }
-            DragEvent.ACTION_DRAG_ENTERED -> {
-                status.text = "Drag entered — release to receive and share."
-                return true
-            }
+            DragEvent.ACTION_DRAG_ENTERED -> { status.text = "Release to receive"; return true }
             DragEvent.ACTION_DRAG_LOCATION, DragEvent.ACTION_DRAG_EXITED -> return true
             DragEvent.ACTION_DROP -> {
                 val clip = event.clipData
-                if (clip == null) {
-                    status.text = "DROP RECEIVED\nClipData is NULL."
-                    return true
-                }
-
-                // Activity-only API: call synchronously while handling the actual ACTION_DROP.
+                if (clip == null) { showStatus("Drop contained no ClipData"); return true }
+                // Activity-only URI grant API must be called synchronously during ACTION_DROP.
                 val permissions = requestDragAndDropPermissions(event)
                 val mimeList = event.clipDescription?.let { d ->
                     (0 until d.mimeTypeCount).map { d.getMimeType(it) }
                 }.orEmpty()
                 if (clip.itemCount != 1) {
                     permissions?.release()
-                    status.text = "DROP REJECTED\\nThis experiment accepts exactly one item per drop.\\nReceived: ${clip.itemCount}"
-                    Toast.makeText(this, "Drag & Go test accepts one item only", Toast.LENGTH_SHORT).show()
+                    showStatus("Only one item per drop is supported")
+                    Toast.makeText(this, "Drag & Go accepts a single item", Toast.LENGTH_SHORT).show()
                     return true
                 }
-                val details = buildString {
-                    append("DROP RECEIVED\nClip items: ${clip.itemCount}\nMIME types: ${mimeList.joinToString(", ")}\n\n")
-                    for (i in 0 until clip.itemCount) {
-                        val item = clip.getItemAt(i)
-                        append("Item $i:\nURI: ${item.uri ?: "(null)"}\nIntent data: ${item.intent?.data ?: "(null)"}\nText: ${item.text ?: "(null)"}\nHTML: ${item.htmlText ?: "(null)"}\n\n")
-                    }
-                }
-                val uri = (0 until clip.itemCount).mapNotNull { i ->
-                    val item = clip.getItemAt(i)
-                    item.uri ?: item.intent?.data
-                }.firstOrNull()
+                val item = clip.getItemAt(0)
+                val uri = item.uri ?: item.intent?.data
+                    ?: item.intent?.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)
                 if (uri == null) {
                     permissions?.release()
-                    status.text = "$details\nRESULT: No URI found in ClipData."
+                    showStatus("Dropped item has no URI")
                     return true
                 }
-                status.text = "$details\nURI found: $uri\nReading dropped content…"
+                val mime = contentResolver.getType(uri) ?: mimeList.firstOrNull() ?: "application/octet-stream"
+                showStatus("Reading dropped item…")
                 io.execute {
                     val result = runCatching {
-                        val mime = contentResolver.getType(uri) ?: mimeList.firstOrNull() ?: "application/octet-stream"
                         val dir = File(cacheDir, "draggo/received").apply { mkdirs() }
-                        val file = File(dir, "dnd-received-${System.currentTimeMillis()}")
+                        val file = File(dir, "drop-${System.currentTimeMillis()}")
                         contentResolver.openInputStream(uri)?.use { input ->
                             FileOutputStream(file).use { output -> input.copyTo(output) }
-                        } ?: error("ContentResolver.openInputStream returned null")
+                        } ?: error("Unable to open dropped URI")
                         file to mime
                     }
                     permissions?.release()
                     runOnUiThread {
-                        status.text = result.fold(
-                            { (file, mime) -> "$details\nURI found: $uri\n\nREAD SUCCESS\nSaved: ${file.name}\nMIME: $mime\nBytes: ${file.length()}\nLaunching Android share sheet…" },
-                            { error -> "$details\nURI found: $uri\n\nREAD FAILED\n${error.javaClass.simpleName}: ${error.message}" }
+                        result.fold(
+                            { (file, type) ->
+                                showStatus("Received ${file.length()} bytes")
+                                Toast.makeText(this, "Drop copied — opening share sheet", Toast.LENGTH_LONG).show()
+                                launchShare(file, type)
+                            },
+                            { err ->
+                                showStatus("Read failed: ${err.message ?: err.javaClass.simpleName}")
+                                Toast.makeText(this, "Couldn't read dropped item", Toast.LENGTH_LONG).show()
+                            }
                         )
-                        Toast.makeText(this, if (result.isSuccess) "Drop read — opening share sheet" else "Drop read failed", Toast.LENGTH_LONG).show()
-                        result.getOrNull()?.let { (file, mime) -> launchShare(file, mime) }
                     }
                 }
                 return true
@@ -122,6 +108,8 @@ class DragReceiverExperimentActivity : Activity() {
         }
         return false
     }
+
+    private fun showStatus(message: String) { status.text = message }
 
     private fun launchShare(file: File, mime: String) {
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
