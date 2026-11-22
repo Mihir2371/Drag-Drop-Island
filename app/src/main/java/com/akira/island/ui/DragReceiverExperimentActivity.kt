@@ -73,6 +73,12 @@ class DragReceiverExperimentActivity : Activity() {
                 val mimeList = event.clipDescription?.let { d ->
                     (0 until d.mimeTypeCount).map { d.getMimeType(it) }
                 }.orEmpty()
+                if (clip.itemCount != 1) {
+                    permissions?.release()
+                    status.text = "DROP REJECTED\\nThis experiment accepts exactly one item per drop.\\nReceived: ${clip.itemCount}"
+                    Toast.makeText(this, "Drag & Go test accepts one item only", Toast.LENGTH_SHORT).show()
+                    return true
+                }
                 val details = buildString {
                     append("DROP RECEIVED\nClip items: ${clip.itemCount}\nMIME types: ${mimeList.joinToString(", ")}\n\n")
                     for (i in 0 until clip.itemCount) {
