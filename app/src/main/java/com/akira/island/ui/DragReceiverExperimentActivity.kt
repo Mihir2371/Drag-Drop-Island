@@ -74,10 +74,10 @@ class DragReceiverExperimentActivity : Activity() {
                     (0 until d.mimeTypeCount).map { d.getMimeType(it) }
                 }.orEmpty()
                 val details = buildString {
-                    append("DROP RECEIVED\nClip items: \${clip.itemCount}\nMIME types: \${mimeList.joinToString(", ")}\n\n")
+                    append("DROP RECEIVED\nClip items: ${clip.itemCount}\nMIME types: ${mimeList.joinToString(", ")}\n\n")
                     for (i in 0 until clip.itemCount) {
                         val item = clip.getItemAt(i)
-                        append("Item $i:\nURI: \${item.uri ?: "(null)"}\nIntent data: \${item.intent?.data ?: "(null)"}\nText: \${item.text ?: "(null)"}\nHTML: \${item.htmlText ?: "(null)"}\n\n")
+                        append("Item $i:\nURI: ${item.uri ?: "(null)"}\nIntent data: ${item.intent?.data ?: "(null)"}\nText: ${item.text ?: "(null)"}\nHTML: ${item.htmlText ?: "(null)"}\n\n")
                     }
                 }
                 val uri = (0 until clip.itemCount).mapNotNull { i ->
@@ -94,7 +94,7 @@ class DragReceiverExperimentActivity : Activity() {
                     val result = runCatching {
                         val mime = contentResolver.getType(uri) ?: mimeList.firstOrNull() ?: "application/octet-stream"
                         val dir = File(cacheDir, "draggo/received").apply { mkdirs() }
-                        val file = File(dir, "dnd-received-\${System.currentTimeMillis()}")
+                        val file = File(dir, "dnd-received-${System.currentTimeMillis()}")
                         contentResolver.openInputStream(uri)?.use { input ->
                             FileOutputStream(file).use { output -> input.copyTo(output) }
                         } ?: error("ContentResolver.openInputStream returned null")
@@ -103,8 +103,8 @@ class DragReceiverExperimentActivity : Activity() {
                     permissions?.release()
                     runOnUiThread {
                         status.text = result.fold(
-                            { (file, mime) -> "$details\nURI found: $uri\n\nREAD SUCCESS\nSaved: \${file.name}\nMIME: $mime\nBytes: \${file.length()}\nLaunching Android share sheet…" },
-                            { error -> "$details\nURI found: $uri\n\nREAD FAILED\n\${error.javaClass.simpleName}: \${error.message}" }
+                            { (file, mime) -> "$details\nURI found: $uri\n\nREAD SUCCESS\nSaved: ${file.name}\nMIME: $mime\nBytes: ${file.length()}\nLaunching Android share sheet…" },
+                            { error -> "$details\nURI found: $uri\n\nREAD FAILED\n${error.javaClass.simpleName}: ${error.message}" }
                         )
                         Toast.makeText(this, if (result.isSuccess) "Drop read — opening share sheet" else "Drop read failed", Toast.LENGTH_LONG).show()
                         result.getOrNull()?.let { (file, mime) -> launchShare(file, mime) }
