@@ -1232,7 +1232,9 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                     if (!duplicate) appLabel else target.activityInfo?.name?.substringAfterLast('.')?.replace(Regex("([a-z])([A-Z])"), "$1 $2")?.replace("Activity", "")?.replace("Handler", "")?.trim()?.ifBlank { appLabel } ?: appLabel
                 }
                 Column(
-                    modifier = Modifier.width(58.dp),
+                    modifier = Modifier.width(58.dp).clickable {
+                        DragGo.sendReceivedFile(context, key)
+                    },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
