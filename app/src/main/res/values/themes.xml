@@ -6,12 +6,12 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
-    <!-- Transparent drag receiver surface. It must be active before the drag starts. -->
+    <!-- Transparent floating window whose bounds are updated to match the island. -->
     <style name="Theme.DragReceiverTransparent" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsFloating">true</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
     </style>
 </resources>
