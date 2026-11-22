@@ -11,6 +11,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.akira.island.service.DragGo
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.Executors
@@ -113,13 +114,11 @@ class DragReceiverExperimentActivity : Activity() {
 
     private fun launchShare(file: File, mime: String) {
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        val send = Intent(Intent.ACTION_SEND).apply {
-            type = mime
-            putExtra(Intent.EXTRA_STREAM, uri)
-            clipData = ClipData.newUri(contentResolver, file.name, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        startActivity(Intent.createChooser(send, "Share dropped item"))
+        // Hand off the cached file to the island's own target picker instead of
+        // launching a standalone chooser. The Activity can now close; picker state
+        // is held in DragGo and rendered by the accessibility overlay.
+        DragGo.activateReceivedFile(this, uri, mime)
+        finish()
     }
 
     override fun onDestroy() {
