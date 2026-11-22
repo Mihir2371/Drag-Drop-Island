@@ -150,6 +150,7 @@ class IslandService : AccessibilityService() {
     private val touchUpdate = Runnable {
         touchSince = 0L
         updateTouchWindow()
+        updateDragReceiverActivity()
     }
     /** Скриншот без острова: снимок — когда окно уже прозрачное, остров возвращается после */
     private val shoot = Runnable {
@@ -624,6 +625,46 @@ class IslandService : AccessibilityService() {
         if (touchSince == 0L) touchSince = now
         handler.removeCallbacks(touchUpdate)
         handler.postAtTime(touchUpdate, minOf(now + TOUCH_QUIET_MS, touchSince + TOUCH_MAX_WAIT_MS))
+    }
+
+    private var dragReceiverBounds = intArrayOf(Int.MIN_VALUE, Int.MIN_VALUE, Int.MIN_VALUE, Int.MIN_VALUE)
+    private fun updateDragReceiverActivity() {
+        val islandArea = when {
+            body.isEmpty -> bubble
+            bubble.isEmpty -> body
+            else -> Rect(
+                minOf(body.left, bubble.left), minOf(body.top, bubble.top),
+                maxOf(body.right, bubble.right), maxOf(body.bottom, bubble.bottom),
+            )
+        }
+        if (!visible || islandArea.isEmpty) {
+            if (dragReceiverBounds[0] != -1) {
+                dragReceiverBounds = intArrayOf(-1, -1, -1, -1)
+                runCatching {
+                    startActivity(Intent(this, com.akira.island.ui.DragReceiverExperimentActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        .putExtra(com.akira.island.ui.DragReceiverExperimentActivity.EXTRA_ACTIVE, false))
+                }
+            }
+            return
+        }
+        val origin = IntArray(2)
+        display?.getLocationOnScreen(origin)
+        val x = origin[0] + floor(islandArea.left).toInt()
+        val y = origin[1] + floor(islandArea.top).toInt()
+        val w = ceil(islandArea.width).toInt().coerceAtLeast(1)
+        val h = ceil(islandArea.height).toInt().coerceAtLeast(1)
+        if (dragReceiverBounds.contentEquals(intArrayOf(x, y, w, h))) return
+        dragReceiverBounds = intArrayOf(x, y, w, h)
+        runCatching {
+            startActivity(Intent(this, com.akira.island.ui.DragReceiverExperimentActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(com.akira.island.ui.DragReceiverExperimentActivity.EXTRA_ACTIVE, true)
+                .putExtra(com.akira.island.ui.DragReceiverExperimentActivity.EXTRA_X, x)
+                .putExtra(com.akira.island.ui.DragReceiverExperimentActivity.EXTRA_Y, y)
+                .putExtra(com.akira.island.ui.DragReceiverExperimentActivity.EXTRA_WIDTH, w)
+                .putExtra(com.akira.island.ui.DragReceiverExperimentActivity.EXTRA_HEIGHT, h))
+        }
     }
 
     private fun updateTouchWindow() {
