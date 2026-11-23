@@ -1310,7 +1310,7 @@ private fun CaptureSharePreviewPanel() {
                     setImageURI(uri)
                 } },
                 update = { it.setImageURI(uri) },
-                modifier = Modifier.width(176.dp).height(150.dp).clip(RoundedCornerShape(14.dp))
+                modifier = Modifier.width(176.dp).height(150.dp).clip(RoundedCornerShape(14.dp)).pointerInput(uri) { detectTapGestures(onLongPress = { CaptureShare.toggleTargets() }) }
             )
             Text("Captured • hold to choose app", color = Color.White, fontSize = 12.sp)
             if (text.isNotBlank()) Text(text.take(160), color = Color.White.copy(alpha = .85f), fontSize = 11.sp)
