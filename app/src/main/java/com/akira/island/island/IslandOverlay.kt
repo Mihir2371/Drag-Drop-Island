@@ -424,6 +424,7 @@ fun IslandOverlay(
     // Остров меряется по своему размеру, а не по окну, и стоит сверху по центру окна
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         DragGoIslandTargets(enabled = saved.dragGoEnabled, notch = s.notch, islandBounds = body.value)
+        CaptureSharePreviewPanel()
         // Оплата: волны NFC и вспышка успеха вокруг острова, как в ролике
         if (!calibrating) PayEffects(primary, { body.value }, s)
         // Пасхалка: свечение за островом, вспышки и звёзды поверх
@@ -1279,6 +1280,60 @@ private fun DragGoIslandTargets(enabled: Boolean, notch: Boolean, islandBounds: 
                         color = Color.White.copy(alpha = 0.9f),
                         fontWeight = FontWeight.Medium,
                     )
+                }
+            }
+        }
+    }
+}
+
+/** Custom capture preview and app targets; independent from Android's share chooser. */
+@Composable
+private fun CaptureSharePreviewPanel() {
+    val context = LocalContext.current
+    val uri by CaptureShare.previewUri.collectAsState()
+    val text by CaptureShare.previewText.collectAsState()
+    val showTargets by CaptureShare.showTargets.collectAsState()
+    val targets by CaptureShare.targets.collectAsState()
+    if (uri == null) return
+    Box(Modifier.fillMaxSize().zIndex(60f), contentAlignment = Alignment.TopCenter) {
+        Column(
+            Modifier.padding(top = 104.dp).clip(RoundedCornerShape(22.dp))
+                .background(Color(0xFF202126).copy(alpha = 0.96f))
+                .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(22.dp))
+                .padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AndroidView(
+                factory = { ctx -> ImageView(ctx).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setImageURI(uri)
+                } },
+                update = { it.setImageURI(uri) },
+                modifier = Modifier.width(176.dp).height(150.dp).clip(RoundedCornerShape(14.dp))
+            )
+            Text("Captured • hold to choose app", color = Color.White, fontSize = 12.sp)
+            if (text.isNotBlank()) Text(text.take(160), color = Color.White.copy(alpha = .85f), fontSize = 11.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBetween) {
+                androidx.compose.material3.TextButton(onClick = { CaptureShare.dismiss() }) {
+                    Text("Dismiss", color = Color.White)
+                }
+                androidx.compose.material3.TextButton(onClick = { CaptureShare.toggleTargets() }) {
+                    Text(if (showTargets) "Hide apps" else "Share to…", color = Color.White)
+                }
+            }
+            if (showTargets) {
+                Row(Modifier.width(230.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    targets.take(12).forEach { target ->
+                        Column(Modifier.width(56.dp).clickable { CaptureShare.sendToTarget(context, CaptureShare.targetKey(target)) },
+                            horizontalAlignment = Alignment.CenterHorizontally) {
+                            AndroidView(factory = { ctx -> ImageView(ctx).apply {
+                                setImageDrawable(target.loadIcon(context.packageManager))
+                                scaleType = ImageView.ScaleType.FIT_CENTER
+                            } }, modifier = Modifier.size(40.dp))
+                            Text(target.loadLabel(context.packageManager).toString().take(12), color = Color.White, fontSize = 9.sp)
+                        }
+                    }
                 }
             }
         }
