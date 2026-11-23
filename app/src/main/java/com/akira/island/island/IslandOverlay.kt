@@ -1314,7 +1314,7 @@ private fun CaptureSharePreviewPanel() {
             )
             Text("Captured • hold to choose app", color = Color.White, fontSize = 12.sp)
             if (text.isNotBlank()) Text(text.take(160), color = Color.White.copy(alpha = .85f), fontSize = 11.sp)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBetween) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 androidx.compose.material3.TextButton(onClick = { CaptureShare.dismiss() }) {
                     Text("Dismiss", color = Color.White)
                 }
