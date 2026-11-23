@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import com.akira.island.service.DragGo
+import com.akira.island.service.CaptureShare
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ContentTransform
@@ -730,9 +731,9 @@ internal fun IslandBody(
                     }
                 }
             }
-            .pointerInput(s.doubleTapAction != TapAction.NOTHING, s.longPressAction != TapAction.NOTHING) {
+            .pointerInput(s.doubleTapAction != TapAction.NOTHING, s.longPressAction != TapAction.NOTHING, dragGoMode) {
                 val doubleOn = settings.doubleTapAction != TapAction.NOTHING
-                val longOn = settings.longPressAction != TapAction.NOTHING
+                val longOn = settings.longPressAction != TapAction.NOTHING || dragGoMode
                 val onDouble: ((Offset) -> Unit)? = if (!doubleOn) null else {
                     { _: Offset ->
                         haptic()
@@ -742,7 +743,7 @@ internal fun IslandBody(
                 val onLong: ((Offset) -> Unit)? = if (!longOn) null else {
                     { _: Offset ->
                         haptic()
-                        perform(context, settings.longPressAction, current)
+                        if (dragGoMode) CaptureShare.capture(context) else perform(context, settings.longPressAction, current)
                     }
                 }
                 detectTapGestures(
