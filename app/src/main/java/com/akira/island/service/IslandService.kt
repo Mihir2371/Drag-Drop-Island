@@ -207,6 +207,7 @@ class IslandService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        CaptureShare.attach(this)
         SettingsRepo.init(this)
         // Android may reconnect this same service instance. Do not create duplicate collectors/windows.
         if (connected) {
@@ -943,6 +944,7 @@ class IslandService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        CaptureShare.detach(this)
         faceUnlock?.stop(); faceUnlock = null
         networkRateMonitor?.stop(); networkRateMonitor = null
         backdropClosed = true
