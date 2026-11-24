@@ -3,4 +3,5 @@
 <paths>
     <cache-path name="update" path="update/" />
     <cache-path name="draggo" path="draggo/" />
+    <cache-path name="captures" path="captures/" />
 </paths>
