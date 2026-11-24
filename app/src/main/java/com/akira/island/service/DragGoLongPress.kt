@@ -40,6 +40,7 @@ internal class DragGoLongPress(private val service: AccessibilityService) {
     private val wm = service.getSystemService(WindowManager::class.java)
     private var overlay: ActionOverlay? = null
     private var text = ""
+    private var anchorBounds = Rect()
     private val dismiss = Runnable { hide() }
 
     fun onLongClick(event: android.view.accessibility.AccessibilityEvent?) {
@@ -47,6 +48,7 @@ internal class DragGoLongPress(private val service: AccessibilityService) {
             event.packageName?.toString() == "com.android.systemui") return
         val node = event.source ?: return
         val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+        anchorBounds = Rect(bounds)
         val content = try { collectText(node) } finally { node.recycle() }
         if (content.isBlank()) { if (Build.VERSION.SDK_INT >= 30) captureOcr(bounds); return }
         text = content.take(MAX_TEXT)
@@ -149,8 +151,11 @@ internal class DragGoLongPress(private val service: AccessibilityService) {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             android.graphics.PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = dp(120)
+            gravity = Gravity.TOP or Gravity.START
+            val screenW = service.resources.displayMetrics.widthPixels
+            val estimatedW = (actions.size * dp(76) + dp(16)).coerceAtMost(screenW - dp(16))
+            x = (anchorBounds.centerX() - estimatedW / 2).coerceIn(dp(8), (screenW - estimatedW - dp(8)).coerceAtLeast(dp(8)))
+            y = if (anchorBounds.top >= dp(90)) anchorBounds.top - dp(72) else anchorBounds.bottom + dp(12)
             title = "DragGoContextActions"
         }
         overlay = view
