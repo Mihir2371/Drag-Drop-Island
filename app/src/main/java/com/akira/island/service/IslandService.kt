@@ -113,6 +113,7 @@ class IslandService : AccessibilityService() {
     private var payReader: PayScreenReader? = null
     private var scrollToTop: ScrollToTop? = null
     private var alarmMonitor: AlarmMonitor? = null
+    private var dragGoLongPress: DragGoLongPress? = null
     private var screenEvents = false
     private var connected = false
     private val keyguard by lazy { getSystemService(KeyguardManager::class.java) }
@@ -208,6 +209,7 @@ class IslandService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         CaptureShare.attach(this)
+        if (dragGoLongPress == null) dragGoLongPress = DragGoLongPress(this)
         SettingsRepo.init(this)
         // Android may reconnect this same service instance. Do not create duplicate collectors/windows.
         if (connected) {
@@ -797,6 +799,7 @@ class IslandService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         scrollToTop?.onAccessibilityEvent(event)
         when (event?.eventType) {
+            AccessibilityEvent.TYPE_VIEW_LONG_CLICKED -> dragGoLongPress?.onLongClick(event)
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> onWindowsChanged()
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> onWindowState(event)
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
@@ -945,6 +948,8 @@ class IslandService : AccessibilityService() {
 
     override fun onDestroy() {
         CaptureShare.detach(this)
+        dragGoLongPress?.destroy()
+        dragGoLongPress = null
         faceUnlock?.stop(); faceUnlock = null
         networkRateMonitor?.stop(); networkRateMonitor = null
         backdropClosed = true
