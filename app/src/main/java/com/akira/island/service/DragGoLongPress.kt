@@ -9,6 +9,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Rect
+import android.os.Build
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -17,6 +20,10 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.util.concurrent.Executors
 import android.view.textclassifier.TextClassification
 import android.view.textclassifier.TextClassificationManager
 import android.view.textclassifier.TextSelection
@@ -29,6 +36,7 @@ import androidx.core.content.ContextCompat
  */
 internal class DragGoLongPress(private val service: AccessibilityService) {
     private val main = Handler(Looper.getMainLooper())
+    private val ocrExecutor = Executors.newSingleThreadExecutor()
     private val wm = service.getSystemService(WindowManager::class.java)
     private var overlay: ActionOverlay? = null
     private var text = ""
@@ -38,8 +46,9 @@ internal class DragGoLongPress(private val service: AccessibilityService) {
         if (event == null || event.packageName?.toString() == service.packageName ||
             event.packageName?.toString() == "com.android.systemui") return
         val node = event.source ?: return
+        val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
         val content = try { collectText(node) } finally { node.recycle() }
-        if (content.isBlank()) return
+        if (content.isBlank()) { if (Build.VERSION.SDK_INT >= 30) captureOcr(bounds); return }
         text = content.take(MAX_TEXT)
         showActions(text)
     }
@@ -61,6 +70,46 @@ internal class DragGoLongPress(private val service: AccessibilityService) {
             if (node !== root) runCatching { node.recycle() }
         }
         return out.toString()
+    }
+
+    /** Screenshot/OCR fallback for non-exposed text, clipped to source node bounds. */
+    private fun captureOcr(bounds: Rect) {
+        if (bounds.isEmpty) return
+        val metrics = service.resources.displayMetrics
+        val rect = Rect(bounds).apply {
+            left = left.coerceIn(0, metrics.widthPixels); right = right.coerceIn(0, metrics.widthPixels)
+            top = top.coerceIn(0, metrics.heightPixels); bottom = bottom.coerceIn(0, metrics.heightPixels)
+        }
+        if (rect.width() < 4 || rect.height() < 4) return
+        service.takeScreenshot(android.view.Display.DEFAULT_DISPLAY, ocrExecutor,
+            object : AccessibilityService.TakeScreenshotCallback {
+                override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
+                    val full = try {
+                        Bitmap.wrapHardwareBuffer(result.hardwareBuffer, result.colorSpace)?.copy(Bitmap.Config.ARGB_8888, false)
+                    } finally { result.hardwareBuffer.close() }
+                    if (full == null) return
+                    val crop = try {
+                        val left=rect.left.coerceAtMost(full.width-1); val top=rect.top.coerceAtMost(full.height-1)
+                        Bitmap.createBitmap(full,left,top,rect.width().coerceAtMost(full.width-left).coerceAtLeast(1),
+                            rect.height().coerceAtMost(full.height-top).coerceAtLeast(1))
+                    } catch (_: Throwable) { full.recycle(); return }
+                    full.recycle()
+                    val edge=720
+                    val bmp=if(maxOf(crop.width,crop.height)>edge) {
+                        val ratio=edge.toFloat()/maxOf(crop.width,crop.height)
+                        Bitmap.createScaledBitmap(crop,(crop.width*ratio).toInt().coerceAtLeast(1),(crop.height*ratio).toInt().coerceAtLeast(1),false).also { crop.recycle() }
+                    } else crop
+                    val recognizer=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                    recognizer.process(InputImage.fromBitmap(bmp,0))
+                        .addOnSuccessListener { result ->
+                            val detected=result.text.trim().take(MAX_TEXT)
+                            if(detected.isNotBlank()) { text=detected; showActions(detected) } else toast("No readable text detected")
+                        }
+                        .addOnFailureListener { toast("Text recognition failed") }
+                        .addOnCompleteListener { bmp.recycle(); recognizer.close() }
+                }
+                override fun onFailure(errorCode: Int) { toast("Screenshot/OCR unavailable ($errorCode)") }
+            })
     }
 
     private fun showActions(text: String) {
@@ -138,7 +187,7 @@ internal class DragGoLongPress(private val service: AccessibilityService) {
         overlay?.let { runCatching { wm.removeView(it) } }
         overlay = null
     }
-    fun destroy() = hide()
+    fun destroy() { hide(); ocrExecutor.shutdown() }
     private fun dp(value: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value.toFloat(), service.resources.displayMetrics).toInt()
     companion object { private const val MAX_TEXT = 1800 }
 
