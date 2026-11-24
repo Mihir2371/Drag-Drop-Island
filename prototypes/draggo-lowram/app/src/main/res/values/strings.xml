@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Drag &amp; Go Low RAM</string>
+    <string name="accessibility_service_description">Long-press contextual actions</string>
+</resources>
